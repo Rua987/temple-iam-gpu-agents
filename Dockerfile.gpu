@@ -1,0 +1,115 @@
+# 🎮 TEMPLE IAM GPU AGENTS - NVIDIA DOCKER 🏛️
+# Docker optimisé pour agents GPU gaming (RTX 20xx/30xx/40xx)
+# Compatible: Alan Wake 2, Cyberpunk 2077, Elden Ring, etc.
+#
+# PLUS ULTRA ! DATTEBAYO ! 🚀⚡
+
+# Base image avec support NVIDIA CUDA
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+
+# Métadonnées du projet
+LABEL maintainer="Temple IAM Team"
+LABEL version="1.0.0"
+LABEL description="Universal GPU optimizer for gaming - Works with any NVIDIA RTX/GTX"
+LABEL gpu.support="GTX 10xx, RTX 20xx/30xx/40xx, Quadro, Tesla"
+LABEL games="Alan Wake 2, Cyberpunk 2077, Elden Ring, Starfield, RDR2"
+
+# Variables d'environnement
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    CUDA_VISIBLE_DEVICES=0 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
+    TZ=UTC
+
+# Installation des dépendances système
+RUN apt-get update && apt-get install -y \
+    # Python et outils de base
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
+    # Outils système
+    curl \
+    wget \
+    git \
+    vim \
+    htop \
+    # Monitoring GPU
+    nvidia-utils-525 \
+    # Librairies système pour GPU
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # Nettoyage
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Mise à jour pip
+RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Création du répertoire de travail
+WORKDIR /temple-iam
+
+# Copie des fichiers requirements
+COPY requirements_gpu.txt .
+
+# Installation des dépendances Python GPU
+RUN pip3 install --no-cache-dir -r requirements_gpu.txt
+
+# Installation des dépendances supplémentaires pour monitoring
+RUN pip3 install --no-cache-dir \
+    # GPU Monitoring
+    gputil \
+    py3nvml \
+    pynvml \
+    # Monitoring système
+    psutil \
+    # Interface graphique (optionnel)
+    # tkinter déjà dans python3.10 \
+    # Utilities
+    numpy \
+    pandas \
+    # Logging
+    colorlog \
+    loguru
+
+# Copie des agents GPU
+COPY alan_wake2_gpu_monitor.py .
+COPY temple_iam_thermal_optimizer.py .
+COPY temple_iam_alan_wake2_gpu_virtual_integration.py .
+COPY temple_iam_gpu_undervolt_quantum.py .
+COPY rtx2070_ultra_optimizer.py .
+COPY gpu_optimizer_ultra_v2.py .
+COPY temple_iam_rtx2070_ultra_optimizer.py .
+
+# Copie du guide utilisateur
+COPY rtx2070_ultra_guide.md .
+COPY GUIDE_BLOATWARE_CLEANER_FR.md .
+
+# Création des répertoires de logs et résultats
+RUN mkdir -p /temple-iam/logs \
+             /temple-iam/results \
+             /temple-iam/config
+
+# Script de démarrage
+COPY docker-entrypoint-gpu.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Healthcheck pour vérifier que le GPU est accessible
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD nvidia-smi || exit 1
+
+# Exposition des ports pour monitoring web (optionnel)
+EXPOSE 8080 8081
+
+# Volume pour les logs persistants
+VOLUME ["/temple-iam/logs", "/temple-iam/results"]
+
+# Point d'entrée
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Commande par défaut : lance le monitoring GPU
+CMD ["python3", "alan_wake2_gpu_monitor.py"]
