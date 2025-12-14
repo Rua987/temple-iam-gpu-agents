@@ -37,7 +37,7 @@ goto menu
 echo.
 echo [*] Lancement Thermal Optimizer...
 echo [!] Necessite permissions admin pour modifier GPU
-python temple_iam_thermal_optimizer.py
+python run_thermal_optimizer.py
 pause
 goto menu
 
@@ -45,7 +45,7 @@ goto menu
 echo.
 echo [*] Lancement GPU Virtual Integration...
 echo [*] Va detecter et lancer Alan Wake 2
-python temple_iam_alan_wake2_gpu_virtual_integration.py
+python run_gpu_virtual_integration.py
 pause
 goto menu
 
@@ -61,7 +61,7 @@ echo.
 echo [*] Lancement de tous les agents...
 echo [*] Monitor + Thermal Optimizer
 start "GPU Monitor" python run_gpu_monitor.py
-start "Thermal Optimizer" python temple_iam_thermal_optimizer.py
+start "Thermal Optimizer" python run_thermal_optimizer.py
 echo.
 echo [OK] Agents lances dans des fenetres separees
 pause
