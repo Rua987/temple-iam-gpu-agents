@@ -63,8 +63,8 @@ docker logs -f temple_iam_gpu_monitor
 # Install dependencies
 pip install -r requirements_gpu.txt
 
-# Run GPU monitor
-python alan_wake2_gpu_monitor.py
+# Run UNIVERSAL GPU monitor (all AAA games)
+python run_gpu_monitor.py
 
 # Run thermal optimizer
 python temple_iam_thermal_optimizer.py

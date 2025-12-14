@@ -34,7 +34,7 @@ Quand tu lances `run_all_agents.bat`, tu vois:
   TEMPLE IAM GPU AGENTS - MENU
 ========================================
 
-1. GPU Monitor (Surveillance temps réel)
+1. GPU Monitor UNIVERSEL (Tous les jeux AAA)
 2. Thermal Optimizer (Contrôle température)
 3. GPU Virtual Integration (Lance Alan Wake 2)
 4. Test GPU Quick (Validation système)
@@ -44,10 +44,11 @@ Quand tu lances `run_all_agents.bat`, tu vois:
 Choisis une option (1-6):
 ```
 
-### **Option 1: GPU Monitor** ⭐ RECOMMANDÉ POUR COMMENCER
+### **Option 1: GPU Monitor UNIVERSEL** ⭐ RECOMMANDÉ POUR COMMENCER
 - Surveillance temps réel de ton GPU
 - Affiche: Température, Utilisation, FPS estimé
-- Détecte automatiquement Alan Wake 2 si lancé
+- **Détecte automatiquement N'IMPORTE QUEL jeu AAA** (Alan Wake 2, Cyberpunk, Elden Ring, etc.)
+- Affiche le nom du jeu détecté en temps réel
 - **Utilisation**: Lance cette option, puis lance ton jeu!
 
 ### **Option 2: Thermal Optimizer**
@@ -81,11 +82,11 @@ Choisis une option (1-6):
 2. Choisis option **4** (Test GPU Quick)
 3. Vérifie que les 4 tests passent ✅
 
-### **Pour jouer à Alan Wake 2**
+### **Pour jouer à N'IMPORTE QUEL jeu AAA**
 1. Double-clique `run_all_agents.bat`
-2. Choisis option **1** (GPU Monitor)
-3. Lance Alan Wake 2 depuis Steam
-4. Le monitor détecte le jeu automatiquement!
+2. Choisis option **1** (GPU Monitor UNIVERSEL)
+3. Lance ton jeu préféré (Alan Wake 2, Cyberpunk, Elden Ring, etc.)
+4. Le monitor détecte le jeu automatiquement et affiche son nom!
 5. Tu vois les stats en temps réel dans la console
 
 **OU**

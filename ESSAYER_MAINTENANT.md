@@ -73,7 +73,7 @@ Tu vois ce menu:
   TEMPLE IAM GPU AGENTS - MENU
 ========================================
 
-1. GPU Monitor (Surveillance temps réel)
+1. GPU Monitor UNIVERSEL (Tous les jeux AAA)
 2. Thermal Optimizer (Contrôle température)
 3. GPU Virtual Integration (Lance Alan Wake 2)
 4. Test GPU Quick (Validation système)
@@ -100,12 +100,12 @@ python run_gpu_monitor.py
 
 ## 📊 QUE VOIR À L'ÉCRAN?
 
-### **Quand tu lances le GPU Monitor:**
+### **Quand tu lances le GPU Monitor UNIVERSEL:**
 
 ```
-🎮 MONITEUR ALAN WAKE 2 GPU - 14:23:45
+🎮 MONITEUR GPU UNIVERSEL - 14:23:45
 ================================================================================
-⏳ ALAN WAKE 2: EN ATTENTE...
+⏳ EN ATTENTE D'UN JEU AAA...
 ================================================================================
 🧠 SYSTÈME:
    CPU: 15.5%
@@ -131,9 +131,9 @@ python run_gpu_monitor.py
 
 ### **Option A: Détection automatique**
 1. Laisse le GPU Monitor tourner
-2. Lance **Alan Wake 2** (ou n'importe quel jeu)
+2. Lance **N'IMPORTE QUEL jeu AAA** (Alan Wake 2, Cyberpunk, Elden Ring, etc.)
 3. Le monitor **détecte automatiquement** le jeu!
-4. Les stats GPU s'activent! 🔥
+4. Les stats GPU s'activent et le **nom du jeu s'affiche**! 🔥
 
 ### **Option B: Lancement assisté**
 1. Ferme le GPU Monitor (`Ctrl+C`)

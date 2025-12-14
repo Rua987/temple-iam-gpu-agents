@@ -8,7 +8,7 @@ echo ========================================
 echo   TEMPLE IAM GPU AGENTS - MENU
 echo ========================================
 echo.
-echo 1. GPU Monitor (Surveillance temps reel)
+echo 1. GPU Monitor UNIVERSEL (Tous les jeux AAA)
 echo 2. Thermal Optimizer (Controle temperature)
 echo 3. GPU Virtual Integration (Lance Alan Wake 2)
 echo 4. Test GPU Quick (Validation systeme)
@@ -26,7 +26,8 @@ if "%choice%"=="6" goto end
 
 :monitor
 echo.
-echo [*] Lancement GPU Monitor...
+echo [*] Lancement GPU Monitor UNIVERSEL...
+echo [*] Compatible avec TOUS les jeux AAA !
 echo [*] Appuie sur Ctrl+C pour arreter
 python run_gpu_monitor.py
 pause

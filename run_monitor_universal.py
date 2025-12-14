@@ -3,7 +3,6 @@
 """
 TEMPLE IAM - UNIVERSAL GPU MONITOR LAUNCHER
 Wrapper pour fixer l'encodage Windows
-Compatible avec TOUS les jeux AAA !
 """
 import sys
 import os
@@ -16,7 +15,7 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
-# Importer le moniteur UNIVERSEL
+# Maintenant on peut importer le monitor universel
 import gpu_monitor_universal
 
 if __name__ == "__main__":
