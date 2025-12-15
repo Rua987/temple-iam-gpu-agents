@@ -41,48 +41,66 @@ Temple IAM GPU Agents is an **intelligent GPU optimization system** that automat
 
 ## 🚀 **Quick Start**
 
-### **Option 1: Docker (Recommended)**
+### **Option 1: Docker (Recommended) - UNIVERSAL SYSTEM**
 
 ```bash
 # Clone repository
 git clone https://github.com/your-username/temple-iam-gpu-agents.git
 cd temple-iam-gpu-agents
 
-# Start GPU monitoring
-docker-compose -f docker-compose.gpu.yml up -d
+# Start UNIVERSAL GPU monitoring (détecte TOUS les jeux automatiquement)
+docker-compose -f docker-compose.gpu.yml up universal-gpu-monitor -d
 
 # View real-time stats
-docker logs -f temple_iam_gpu_monitor
+docker logs -f temple_iam_universal_gpu_monitor
 ```
 
-### **Option 2: Python**
+### **Option 2: Python - UNIVERSAL SYSTEM**
 
 ```bash
 # Install dependencies
 pip install -r requirements_gpu.txt
 
-# Run GPU monitor
-python alan_wake2_gpu_monitor.py
+# Run UNIVERSAL GPU monitor (détecte TOUS les jeux)
+python universal_gpu_monitor.py
 
-# Run thermal optimizer
+# Run thermal optimizer (compatible tous jeux)
 python temple_iam_thermal_optimizer.py
+
+# Test the universal system
+python test_universal_system_safe.py
+```
+
+### **Legacy Mode (Alan Wake 2 only)**
+
+```bash
+# Docker
+docker-compose -f docker-compose.gpu.yml --profile legacy up legacy-gpu-monitor
+
+# Python
+python alan_wake2_gpu_monitor.py
 ```
 
 ---
 
 ## 🎯 **Features**
 
-### 🖥️ **1. Real-Time GPU Monitoring**
-- Auto-detects running games (Alan Wake 2, Cyberpunk, Elden Ring, etc.)
-- Live FPS estimation
+### 🖥️ **1. Universal Real-Time GPU Monitoring**
+- **🎯 Auto-detects ANY game** - Not limited to specific titles!
+- **📚 Built-in database** - 16+ AAA games with optimized profiles
+- **🧠 Auto-learning** - Automatically learns new games
+- Live FPS estimation per game
 - GPU temperature, VRAM usage, power draw
-- Automatic performance alerts
+- Game-specific automatic performance alerts
+- **NEW**: Adaptive optimization profiles per game
 
-### 🔥 **2. Intelligent Thermal Management**
-- Target temperature: **75°C** (configurable)
+### 🔥 **2. Universal Intelligent Thermal Management**
+- **🎮 Game-aware** - Adjusts thermal targets based on detected game
+- Target temperature: **75°C** (auto-adjusted per game profile)
 - Automatic fan speed adjustment
 - Power limit optimization
 - Emergency thermal protection at 85°C
+- **NEW**: Per-game thermal profiles (low/medium/high/extreme)
 
 ### ⚡ **3. GPU Undervolt (Quantum Algorithm)**
 - **5-10°C** temperature reduction

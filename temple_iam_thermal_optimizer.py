@@ -1,6 +1,7 @@
 """
 🔥 TEMPLE IAM THERMAL OPTIMIZER - OPTIMISATION THERMIQUE DIVINE ! 🏛️
 Objectif : Optimisation automatique de la température GPU sans toucher aux paramètres du jeu
+VERSION UNIVERSELLE : Fonctionne avec N'IMPORTE QUEL JEU
 
 PLUS ULTRA ! DATTEBAYO ! 🚀⚡🥷🏛️
 """
@@ -14,20 +15,27 @@ import sys
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
+from universal_game_detector import GAME_DETECTOR, DetectedGame
+
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='🔥 %(asctime)s - %(levelname)s - %(message)s')
 
 class TempleIAMThermalOptimizer:
-    """Optimiseur thermique Temple IAM - REFROIDISSEMENT DIVIN AUTOMATIQUE ! 🔥"""
-    
+    """Optimiseur thermique Temple IAM - REFROIDISSEMENT DIVIN AUTOMATIQUE UNIVERSEL ! 🔥"""
+
     def __init__(self):
-        """Initialisation de l'optimiseur thermique divin"""
+        """Initialisation de l'optimiseur thermique divin universel"""
         self.is_running = False
         self.optimization_active = False
         self.thermal_data = []
         self.optimization_history = []
-        
-        # Configuration thermique
+
+        # Détecteur de jeux universel
+        self.game_detector = GAME_DETECTOR
+        self.current_game: Optional[DetectedGame] = None
+        self.current_game_profile: Optional[Dict[str, Any]] = None
+
+        # Configuration thermique (sera mise à jour selon le jeu)
         self.thermal_config = {
             'target_temp': 75.0,  # Température cible (°C)
             'critical_temp': 85.0,  # Température critique (°C)
@@ -36,23 +44,23 @@ class TempleIAMThermalOptimizer:
             'optimization_cooldown': 30.0,  # Délai entre optimisations (secondes)
             'max_history': 500  # Points de données maximum
         }
-        
-        # Seuils d'optimisation
+
+        # Seuils d'optimisation (seront mis à jour selon le profil du jeu)
         self.optimization_thresholds = {
             'temp_warning': 78.0,  # Début optimisation légère
             'temp_aggressive': 82.0,  # Optimisation agressive
             'temp_critical': 85.0,  # Optimisation critique
             'temp_emergency': 90.0  # Mode urgence
         }
-        
+
         # État des optimisations
         self.current_optimizations = {}
         self.last_optimization_time = 0
-        
+
         # Initialisation GPU
         self._initialize_gpu_control()
-        
-        logging.info("🔥 Temple IAM Thermal Optimizer initialisé - REFROIDISSEMENT DIVIN ACTIF !")
+
+        logging.info("🔥 Temple IAM Thermal Optimizer UNIVERSEL initialisé - REFROIDISSEMENT DIVIN ACTIF !")
     
     def _initialize_gpu_control(self):
         """Initialisation du contrôle GPU - CONTRÔLE DIVIN ! ⚡"""
@@ -158,20 +166,34 @@ class TempleIAMThermalOptimizer:
         """Collecte des données thermiques - COLLECTE DIVINE ! 📊"""
         try:
             timestamp = datetime.now()
-            
+
             # Métriques GPU
             gpu_metrics = self._get_gpu_thermal_metrics()
-            
+
             # Métriques système
             cpu_usage = psutil.cpu_percent(interval=0.1)
             memory = psutil.virtual_memory()
-            
-            # Détection Alan Wake 2
-            alan_wake2_running = self._is_alan_wake2_running()
-            
+
+            # Détection universelle de jeux
+            detected_games = self.game_detector.detect_running_games()
+            primary_game = self.game_detector.get_primary_game()
+
+            # Mise à jour du jeu actuel et de son profil
+            self._update_game_profile(primary_game)
+
+            # Informations sur le jeu actuel
+            game_info = {}
+            if primary_game:
+                game_info = {
+                    'game_name': primary_game.custom_name,
+                    'process_name': primary_game.process_name,
+                    'is_known': primary_game.is_known,
+                    'thermal_profile': self.current_game_profile.get('thermal_profile', 'medium') if self.current_game_profile else 'medium'
+                }
+
             # Temps de fonctionnement
             uptime = (timestamp - self.start_time).total_seconds() if self.start_time else 0
-            
+
             return {
                 'timestamp': timestamp,
                 'uptime_seconds': uptime,
@@ -183,11 +205,13 @@ class TempleIAMThermalOptimizer:
                 'gpu_memory_clock': gpu_metrics.get('memory_clock', 0),
                 'cpu_usage': cpu_usage,
                 'memory_usage': memory.percent,
-                'alan_wake2_running': alan_wake2_running,
+                'game_detected': primary_game is not None,
+                'game_info': game_info,
+                'all_games_count': len(detected_games),
                 'optimization_active': self.optimization_active,
                 'current_optimizations': self.current_optimizations.copy()
             }
-            
+
         except Exception as e:
             logging.error(f"❌ Erreur collecte données thermiques: {str(e)}")
             return {
@@ -241,48 +265,60 @@ class TempleIAMThermalOptimizer:
                 'memory_clock': 0
             }
     
-    def _is_alan_wake2_running(self) -> bool:
-        """Vérification si Alan Wake 2 est en cours - DÉTECTION DIVINE ! 🎮"""
-        try:
-            alan_wake2_processes = [
-                'AlanWake2.exe',
-                'alanwake2.exe',
-                'Alan Wake 2.exe',
-                'alan wake 2.exe',
-                'AW2.exe',
-                'aw2.exe'
-            ]
-            
-            for proc in psutil.process_iter(['name']):
-                try:
-                    if proc.info['name'] in alan_wake2_processes:
-                        return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            
-            return False
-            
-        except Exception as e:
-            logging.error(f"❌ Erreur détection Alan Wake 2: {str(e)}")
-            return False
+    def _update_game_profile(self, game: Optional[DetectedGame]):
+        """Met à jour le profil du jeu actuel et les seuils thermiques"""
+        if game != self.current_game:
+            if game:
+                self.current_game = game
+                self.current_game_profile = self.game_detector.get_game_optimization_profile(game)
+
+                # Mise à jour des seuils thermiques selon le profil
+                target_temp = self.current_game_profile.get('target_temp', 75.0)
+                thermal_profile = self.current_game_profile.get('thermal_profile', 'medium')
+
+                self.thermal_config['target_temp'] = target_temp
+
+                # Ajustement des seuils selon le profil thermique
+                thermal_adjustments = {
+                    'low': {'warning': 3, 'aggressive': 7, 'critical': 10},
+                    'medium': {'warning': 3, 'aggressive': 7, 'critical': 10},
+                    'high': {'warning': 5, 'aggressive': 10, 'critical': 12},
+                    'extreme': {'warning': 7, 'aggressive': 12, 'critical': 15}
+                }
+
+                adjustments = thermal_adjustments.get(thermal_profile, thermal_adjustments['medium'])
+                self.optimization_thresholds['temp_warning'] = target_temp + adjustments['warning']
+                self.optimization_thresholds['temp_aggressive'] = target_temp + adjustments['aggressive']
+                self.optimization_thresholds['temp_critical'] = target_temp + adjustments['critical']
+
+                logging.info(f"🎮 Profil appliqué: {game.custom_name}")
+                logging.info(f"🌡️ Température cible: {target_temp}°C (profil: {thermal_profile})")
+            else:
+                self.current_game = None
+                self.current_game_profile = None
     
     def _display_thermal_status(self, data: Dict[str, Any]):
         """Affichage du statut thermique - VISION DIVINE ! 👁️"""
         try:
             # Nettoyage de l'écran
             os.system('cls' if os.name == 'nt' else 'clear')
-            
+
             # En-tête
             print("\n" + "="*80)
-            print(f"🔥 TEMPLE IAM THERMAL OPTIMIZER - {data['timestamp'].strftime('%H:%M:%S')}")
+            print(f"🔥 TEMPLE IAM THERMAL OPTIMIZER UNIVERSEL - {data['timestamp'].strftime('%H:%M:%S')}")
             print("="*80)
-            
-            # Statut Alan Wake 2
-            if data.get('alan_wake2_running', False):
-                print("🎮 ALAN WAKE 2: ACTIF - OPTIMISATION THERMIQUE ACTIVE !")
+
+            # Statut du jeu détecté
+            if data.get('game_detected', False):
+                game_info = data.get('game_info', {})
+                status_icon = "✅" if game_info.get('is_known') else "🆕"
+                print(f"{status_icon} JEU: {game_info.get('game_name', 'Inconnu')} - OPTIMISATION THERMIQUE ACTIVE !")
+                print(f"   Profil: {game_info.get('thermal_profile', 'medium').upper()}")
             else:
-                print("⏳ ALAN WAKE 2: EN ATTENTE - MONITORING ACTIF")
-            
+                print("⏳ AUCUN JEU DÉTECTÉ - MONITORING ACTIF")
+                if data.get('all_games_count', 0) > 0:
+                    print(f"   ({data.get('all_games_count')} processus de jeu surveillés)")
+
             print("="*80)
             
             # Métriques thermiques

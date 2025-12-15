@@ -1,18 +1,49 @@
 # 🎮 TEMPLE IAM GPU AGENTS - DOCKER COMPOSE 🏛️
 # Déploiement complet des agents GPU gaming
 # Compatible: Toutes RTX/GTX NVIDIA + Tous jeux AAA
+# VERSION UNIVERSELLE : Détection automatique de N'IMPORTE QUEL JEU !
 #
 # PLUS ULTRA ! DATTEBAYO ! 🚀⚡
 
 version: '3.8'
 
 services:
-  # 🖥️ GPU Monitor - Surveillance GPU temps réel
-  gpu-monitor:
+  # 🖥️ Universal GPU Monitor - Surveillance GPU temps réel TOUS JEUX
+  universal-gpu-monitor:
     build:
       context: .
       dockerfile: Dockerfile.gpu
-    container_name: temple_iam_gpu_monitor
+    container_name: temple_iam_universal_gpu_monitor
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - MONITOR_INTERVAL=1.0
+      - AUTO_LEARN=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/temple-iam/logs
+      - ./results:/temple-iam/results
+      - ./config:/temple-iam/config
+      - ./learned_games.json:/temple-iam/learned_games.json
+    command: python3 universal_gpu_monitor.py
+    networks:
+      - temple_gpu_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # 🖥️ Legacy GPU Monitor - Alan Wake 2 spécifique (rétrocompatibilité)
+  legacy-gpu-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: temple_iam_legacy_gpu_monitor
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
@@ -28,6 +59,8 @@ services:
     networks:
       - temple_gpu_network
     restart: unless-stopped
+    profiles:
+      - legacy
     deploy:
       resources:
         reservations:
