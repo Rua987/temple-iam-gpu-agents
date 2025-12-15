@@ -58,17 +58,44 @@ class UniversalGameDetector:
 
         # Liste de processus système à ignorer
         self.ignore_processes = {
+            # Windows système
             'explorer.exe', 'svchost.exe', 'system', 'registry',
             'dwm.exe', 'csrss.exe', 'winlogon.exe', 'services.exe',
             'lsass.exe', 'smss.exe', 'wininit.exe', 'taskhostw.exe',
             'runtimebroker.exe', 'searchindexer.exe', 'msiexec.exe',
             'conhost.exe', 'dllhost.exe', 'audiodg.exe', 'spoolsv.exe',
+
+            # Windows mémoire et compression
+            'memcompression', 'vmmem', 'vmmemwsl', 'memory compression',
+
+            # Navigateurs
             'chrome.exe', 'firefox.exe', 'edge.exe', 'brave.exe',
+            'msedge.exe', 'opera.exe', 'vivaldi.exe',
+
+            # Communication
             'discord.exe', 'spotify.exe', 'slack.exe', 'teams.exe',
+            'zoom.exe', 'skype.exe', 'telegram.exe', 'whatsapp.exe',
+
+            # Développement et éditeurs
             'code.exe', 'notepad.exe', 'notepad++.exe', 'sublime_text.exe',
-            'python.exe', 'pythonw.exe', 'cmd.exe', 'powershell.exe',
+            'pycharm64.exe', 'idea64.exe', 'rider64.exe', 'webstorm64.exe',
+            'python.exe', 'pythonw.exe', 'node.exe', 'java.exe', 'javaw.exe',
+            'cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'wsl.exe',
+
+            # AI Assistants
+            'claude.exe', 'claude code.exe', 'cursor.exe',
+
+            # GPU/Hardware utilities
             'nvcontainer.exe', 'nvidia web helper.exe', 'nvidia share.exe',
-            'steamwebhelper.exe', 'epicwebhelper.exe'
+            'nvdisplay.container.exe', 'radeonrelivehost.exe', 'amdrsserv.exe',
+
+            # Launchers helpers (not the games themselves)
+            'steamwebhelper.exe', 'epicwebhelper.exe', 'origin.exe',
+            'uplay.exe', 'uplaywebcore.exe', 'battlenet.exe', 'battle.net.exe',
+
+            # Utilitaires système
+            'taskmgr.exe', 'perfmon.exe', 'resmon.exe', 'mmc.exe',
+            'control.exe', 'regedit.exe', 'msconfig.exe'
         }
 
         # Patterns de jeux connus (suffixes d'exécutables)
