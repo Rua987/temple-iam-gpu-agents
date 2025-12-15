@@ -56,7 +56,7 @@ class UniversalGPUMonitor:
         self.alert_thresholds = {
             'gpu_usage': 95.0,
             'gpu_memory': 90.0,
-            'gpu_temperature': 80.0,
+            'gpu_temperature': 65.0,  # Activation plus précoce pour meilleure protection thermique
             'cpu_usage': 95.0,
             'memory_usage': 90.0,
             'fps_drop': 30.0
@@ -174,17 +174,18 @@ class UniversalGPUMonitor:
     def _update_alert_thresholds(self, profile: Dict[str, Any]):
         """Met à jour les seuils d'alerte selon le profil du jeu"""
         thermal_map = {
-            'low': {'gpu_temperature': 70.0, 'gpu_usage': 70.0},
-            'medium': {'gpu_temperature': 75.0, 'gpu_usage': 80.0},
-            'high': {'gpu_temperature': 80.0, 'gpu_usage': 90.0},
-            'extreme': {'gpu_temperature': 82.0, 'gpu_usage': 95.0}
+            'low': {'gpu_temperature': 60.0, 'gpu_usage': 70.0},
+            'medium': {'gpu_temperature': 65.0, 'gpu_usage': 80.0},
+            'high': {'gpu_temperature': 70.0, 'gpu_usage': 90.0},
+            'extreme': {'gpu_temperature': 75.0, 'gpu_usage': 95.0}
         }
 
         thermal_profile = profile.get('thermal_profile', 'medium')
         thresholds = thermal_map.get(thermal_profile, thermal_map['medium'])
 
         self.alert_thresholds.update(thresholds)
-        self.alert_thresholds['gpu_temperature'] = profile.get('target_temp', 75.0) + 5
+        # Seuil = température cible du jeu - 5°C pour activation précoce
+        self.alert_thresholds['gpu_temperature'] = profile.get('target_temp', 65.0)
 
     def _collect_monitoring_data(self, primary_game: Optional[DetectedGame], all_games: List[DetectedGame]) -> Dict[str, Any]:
         """Collecte des données de monitoring - COLLECTE DIVINE ! 📊"""
