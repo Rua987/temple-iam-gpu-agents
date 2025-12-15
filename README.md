@@ -12,6 +12,8 @@
 
 *Make ANY NVIDIA GPU run games better. Automatically.*
 
+### 🚀 **[JE VEUX ESSAYER MAINTENANT!](ESSAYER_MAINTENANT.md)** ← Guide 2 minutes
+
 [Features](#-features) •
 [Quick Start](#-quick-start) •
 [Docker](#-docker-deployment) •

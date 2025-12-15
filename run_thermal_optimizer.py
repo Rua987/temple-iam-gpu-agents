@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TEMPLE IAM - UNIVERSAL GPU MONITOR LAUNCHER
+TEMPLE IAM - THERMAL OPTIMIZER LAUNCHER
 Wrapper pour fixer l'encodage Windows
-Compatible avec TOUS les jeux AAA !
+Compatible avec TOUS les GPU NVIDIA !
 """
 import sys
 import os
@@ -16,8 +16,8 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
-# Importer le moniteur UNIVERSEL
-import gpu_monitor_universal
+# Importer le thermal optimizer
+import temple_iam_thermal_optimizer
 
 if __name__ == "__main__":
-    gpu_monitor_universal.main()
+    temple_iam_thermal_optimizer.main()

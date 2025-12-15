@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-TEMPLE IAM - UNIVERSAL GPU MONITOR LAUNCHER
+TEMPLE IAM - GPU UNDERVOLT QUANTUM LAUNCHER
 Wrapper pour fixer l'encodage Windows
-Compatible avec TOUS les jeux AAA !
+Undervolt intelligent pour réduire température sans perte performance
 """
 import sys
 import os
@@ -16,8 +16,7 @@ if sys.platform == 'win32':
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
 
-# Importer le moniteur UNIVERSEL
-import gpu_monitor_universal
-
+# Exécuter le script undervolt directement
 if __name__ == "__main__":
-    gpu_monitor_universal.main()
+    # Import et exécution
+    exec(open('temple_iam_gpu_undervolt_quantum.py', encoding='utf-8').read())
