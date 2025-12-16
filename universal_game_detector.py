@@ -183,6 +183,11 @@ class UniversalGameDetector:
                     if not proc_name:
                         continue
 
+                    # 0. FILTRAGE PRIORITAIRE : Ignorer les processus système
+                    proc_name_lower = proc_name.lower()
+                    if proc_name_lower in self.ignore_processes:
+                        continue
+
                     # 1. Vérifier dans la base de données connue
                     game_profile = GAMES_DB.get_game_by_process(proc_name)
 
