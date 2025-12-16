@@ -24,6 +24,7 @@ import sys
 
 from universal_game_detector import GAME_DETECTOR, DetectedGame
 from games_database import GAMES_DB
+from gpu_ml_logger import ML_LOGGER
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='🎮 %(asctime)s - %(levelname)s - %(message)s')
@@ -47,6 +48,10 @@ class UniversalGPUMonitor:
 
         # Détecteur de jeux
         self.game_detector = GAME_DETECTOR
+
+        # ML Logger pour apprentissage intelligent
+        self.ml_logger = ML_LOGGER
+        self.ml_session_active = False
 
         # Jeu actuellement surveillé
         self.current_game: Optional[DetectedGame] = None
@@ -138,6 +143,21 @@ class UniversalGPUMonitor:
                 if len(self.monitoring_data) > self.max_history:
                     self.monitoring_data.pop(0)
 
+                # 5.5. ML Logging - Apprentissage intelligent
+                if self.ml_session_active and monitoring_data.get('game_detected'):
+                    self.ml_logger.log_datapoint({
+                        'gpu_temperature': monitoring_data.get('gpu_temperature', 0),
+                        'gpu_usage': monitoring_data.get('gpu_usage', 0),
+                        'gpu_memory_percent': monitoring_data.get('gpu_memory_percent', 0),
+                        'cpu_usage': monitoring_data.get('cpu_usage', 0),
+                        'memory_usage': monitoring_data.get('memory_usage', 0),
+                        'fps_estimate': monitoring_data.get('fps_estimate', 0)
+                    })
+
+                    # Détection de spikes ML
+                    gpu_load = monitoring_data.get('gpu_usage', 0)
+                    self.ml_logger.detect_spike(gpu_load)
+
                 # 6. Affichage temps réel
                 self._display_monitoring_status(monitoring_data)
 
@@ -154,12 +174,21 @@ class UniversalGPUMonitor:
     def _update_current_game(self, game: Optional[DetectedGame]):
         """Met à jour le jeu actuellement surveillé"""
         if game != self.current_game:
+            # Terminer la session ML précédente si elle existe
+            if self.ml_session_active:
+                self.ml_logger.end_session()
+                self.ml_session_active = False
+
             if game:
                 self.current_game = game
                 self.current_game_profile = self.game_detector.get_game_optimization_profile(game)
 
                 # Mise à jour des seuils d'alerte selon le profil
                 self._update_alert_thresholds(self.current_game_profile)
+
+                # Démarrer une session ML pour ce jeu
+                self.ml_logger.start_session(game.custom_name)
+                self.ml_session_active = True
 
                 logging.info(f"🎮 Jeu actif: {game.custom_name} ({game.process_name})")
                 if game.is_known:
@@ -375,6 +404,35 @@ class UniversalGPUMonitor:
         print(f"CPU:          {self._create_bar(cpu_usage, 100)} {cpu_usage:5.1f}%")
         print(f"RAM:          {self._create_bar(mem_usage, 100)} {mem_usage:5.1f}% ({data.get('memory_available_gb', 0):.1f} GB dispo)")
 
+        # ML Insights - Apprentissage intelligent
+        if self.ml_session_active and data.get('game_detected'):
+            print("\n" + "-"*80)
+            print("🧠 ML INSIGHTS - APPRENTISSAGE INTELLIGENT")
+            print("-"*80)
+
+            # Tendance thermique
+            trend = self.ml_logger.get_thermal_trend()
+            trend_icons = {
+                'rising': '📈 MONTÉE',
+                'falling': '📉 DESCENTE',
+                'stable': '➡️ STABLE'
+            }
+            print(f"Tendance temp: {trend_icons.get(trend, trend)}")
+
+            # Prédiction température
+            predicted_temp = self.ml_logger.predict_temperature(60)
+            if predicted_temp:
+                current_temp = data.get('gpu_temperature', 0)
+                delta = predicted_temp - current_temp
+                delta_sign = "+" if delta > 0 else ""
+                print(f"Préd. +60s:   {predicted_temp:.1f}°C ({delta_sign}{delta:.1f}°C)")
+
+            # Stats session
+            ml_stats = self.ml_logger.get_session_stats()
+            print(f"Session:      {ml_stats['duration_minutes']:.1f} min | {ml_stats['datapoints']} points")
+            if ml_stats['spikes_detected'] > 0:
+                print(f"⚠️  Spikes GPU:   {ml_stats['spikes_detected']} détecté(s)")
+
         # Tous les jeux détectés
         if data.get('all_games_count', 0) > 1:
             print("\n" + "-"*80)
@@ -453,6 +511,12 @@ class UniversalGPUMonitor:
     def stop_monitoring(self):
         """Arrêt du monitoring - ARRÊT GRACIEUX ! 🛑"""
         self.is_running = False
+
+        # Terminer la session ML si active
+        if self.ml_session_active:
+            self.ml_logger.end_session()
+            self.ml_session_active = False
+
         logging.info("🛑 Monitoring arrêté")
 
         # Statistiques finales
