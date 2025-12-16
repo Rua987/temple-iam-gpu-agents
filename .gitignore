@@ -38,3 +38,7 @@ Thumbs.db
 # GPU test outputs
 gpu_test_*.txt
 benchmark_*.json
+
+# ML data (user-specific learning data)
+gpu_ml_data/
+learned_games.json
