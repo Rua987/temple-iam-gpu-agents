@@ -95,7 +95,11 @@ class UniversalGameDetector:
 
             # Utilitaires système
             'taskmgr.exe', 'perfmon.exe', 'resmon.exe', 'mmc.exe',
-            'control.exe', 'regedit.exe', 'msconfig.exe'
+            'control.exe', 'regedit.exe', 'msconfig.exe',
+
+            # Antivirus et sécurité
+            'msmpeng.exe', 'mssense.exe', 'nissrv.exe', 'securityhealthservice.exe',
+            'avastui.exe', 'avgui.exe', 'mbamservice.exe'
         }
 
         # Patterns de jeux connus (suffixes d'exécutables)
