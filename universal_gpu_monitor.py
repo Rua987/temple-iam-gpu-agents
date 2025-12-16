@@ -173,7 +173,11 @@ class UniversalGPUMonitor:
 
     def _update_current_game(self, game: Optional[DetectedGame]):
         """Met à jour le jeu actuellement surveillé"""
-        if game != self.current_game:
+        # Comparer les noms de jeux au lieu des objets pour éviter de recréer des sessions
+        new_game_name = game.custom_name if game else None
+        current_game_name = self.current_game.custom_name if self.current_game else None
+
+        if new_game_name != current_game_name:
             # Terminer la session ML précédente si elle existe
             if self.ml_session_active:
                 self.ml_logger.end_session()
