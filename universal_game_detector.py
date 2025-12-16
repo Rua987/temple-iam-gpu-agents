@@ -98,8 +98,9 @@ class UniversalGameDetector:
             'control.exe', 'regedit.exe', 'msconfig.exe',
 
             # Antivirus et sécurité
-            'msmpeng.exe', 'mssense.exe', 'nissrv.exe', 'securityhealthservice.exe',
-            'avastui.exe', 'avgui.exe', 'mbamservice.exe'
+            'msmpeng.exe', 'msmpeng', 'mssense.exe', 'nissrv.exe', 'securityhealthservice.exe',
+            'avastui.exe', 'avgui.exe', 'mbamservice.exe',
+            'windows defender', 'defender'
         }
 
         # Patterns de jeux connus (suffixes d'exécutables)
