@@ -44,11 +44,19 @@ try:
     print("="*80)
     print()
 
+    # Force reload des modules (évite le cache Python)
+    import importlib
+    if 'universal_game_detector' in sys.modules:
+        importlib.reload(sys.modules['universal_game_detector'])
+    if 'universal_gpu_monitor' in sys.modules:
+        importlib.reload(sys.modules['universal_gpu_monitor'])
+
     # Import le moniteur universel v2
     from universal_gpu_monitor import UniversalGPUMonitor, main
 
     print("[OK] Universal GPU Monitor V2 loaded successfully")
     print("[OK] UTF-8 encoding active (Windows compatible)")
+    print("[OK] Modules reloaded (no cache)")
     print()
 
     # Lance le moniteur
