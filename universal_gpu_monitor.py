@@ -177,6 +177,10 @@ class UniversalGPUMonitor:
         new_game_name = game.custom_name if game else None
         current_game_name = self.current_game.custom_name if self.current_game else None
 
+        # Debug: Log la comparaison
+        if new_game_name and current_game_name:
+            logging.info(f"🔍 DEBUG ML: NEW='{new_game_name}' | OLD='{current_game_name}' | SAME={new_game_name == current_game_name}")
+
         if new_game_name != current_game_name:
             # Terminer la session ML précédente si elle existe
             if self.ml_session_active:
