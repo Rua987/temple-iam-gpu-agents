@@ -1,12 +1,15 @@
 """Run test_offline_agent_validation.py (unittest, no GPU required).
 
-Exit 0 if all 9 offline tests pass; exit 1 otherwise.
+Exit 0 if all offline tests pass; exit 1 otherwise.
 """
 
 import os
 import re
 import subprocess
 import sys
+
+
+EXPECTED_TESTS = 14
 
 
 def main() -> int:
@@ -34,11 +37,14 @@ def main() -> int:
 
     count = int(ran.group(1))
     ok = bool(re.search(r"^OK\s*$", output, re.MULTILINE))
-    if ok and count == 9 and proc.returncode == 0:
-        print("OK: 9 offline tests passed.")
+    if ok and count == EXPECTED_TESTS and proc.returncode == 0:
+        print(f"OK: {EXPECTED_TESTS} offline tests passed.")
         return 0
 
-    print(f"FAIL: expected 9 passed (OK), got Ran {count} tests, exit={proc.returncode}.")
+    print(
+        f"FAIL: expected {EXPECTED_TESTS} passed (OK), "
+        f"got Ran {count} tests, exit={proc.returncode}."
+    )
     return 1
 
 
