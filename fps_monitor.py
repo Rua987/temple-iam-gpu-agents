@@ -25,6 +25,8 @@ from datetime import datetime
 from collections import deque
 import json
 
+from rtss_reader import RTSSReader
+
 logging.basicConfig(level=logging.INFO, format='📊 %(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -53,53 +55,28 @@ class FPSSession:
 
 
 class RTSSMonitor:
-    """
-    Moniteur FPS via RTSS (RivaTuner Statistics Server)
-    Lit directement depuis la shared memory de RTSS
-    """
+    """Moniteur FPS via RTSS, en déléguant au lecteur partagé RTSSReader.
 
-    # Structure RTSS Shared Memory Header
-    RTSS_SIGNATURE = 0x52545353  # 'RTSS'
+    L'ancienne implémentation faisait mmap(-1, ...) (ce qui crée un bloc vide au
+    lieu de s'attacher à celui de RTSS) puis lisait un float à un offset deviné,
+    donc renvoyait du garbage. RTSSReader s'attache à la vraie mémoire partagée
+    via OpenFileMapping et calcule FPS = dwFrames*1000/(dwTime1-dwTime0).
+    """
 
     def __init__(self):
-        self.is_available = False
-        self.shared_memory = None
-        self._check_rtss()
-
-    def _check_rtss(self):
-        """Vérifie si RTSS est disponible"""
-        try:
-            # Essayer d'ouvrir la shared memory RTSS
-            self.shared_memory = mmap.mmap(-1, 4096, "RTSSSharedMemoryV2", access=mmap.ACCESS_READ)
-
-            # Lire la signature
-            self.shared_memory.seek(0)
-            signature = struct.unpack('I', self.shared_memory.read(4))[0]
-
-            if signature == self.RTSS_SIGNATURE:
-                self.is_available = True
-                logging.info("✅ RTSS détecté et disponible !")
-            else:
-                self.is_available = False
-                logging.warning("⚠️ RTSS shared memory trouvée mais signature invalide")
-
-        except Exception as e:
-            self.is_available = False
-            logging.info(f"ℹ️ RTSS non disponible: {str(e)}")
+        self._reader = RTSSReader()
+        self.is_available = self._reader.available
+        if self.is_available:
+            logging.info("✅ RTSS détecté et disponible !")
+        else:
+            logging.info("ℹ️ RTSS non disponible (lancez MSI Afterburner / RTSS)")
 
     def get_fps(self) -> Optional[float]:
-        """Lit le FPS actuel depuis RTSS"""
-        if not self.is_available or not self.shared_memory:
+        """FPS de l'app hookée la plus rapide (None si indisponible/aucune)."""
+        if not self.is_available:
             return None
-
-        try:
-            # Structure simplifiée - offset du FPS dans RTSS shared memory
-            # Note: La vraie structure est plus complexe, ceci est une approximation
-            self.shared_memory.seek(32)  # Offset approximatif pour le FPS
-            fps_data = struct.unpack('f', self.shared_memory.read(4))[0]
-            return fps_data if fps_data > 0 and fps_data < 1000 else None
-        except:
-            return None
+        fps = self._reader.read_max_fps()
+        return fps if fps > 0 else None
 
 
 class PresentMonMonitor:
