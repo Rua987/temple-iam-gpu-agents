@@ -97,7 +97,7 @@ def main():
     print("OLLAMA AUTO-TUNING RESULTS")
     print("="*80)
     for r in results:
-        status_str = f"✅ {r['optimal_mhz']} MHz" if r['optimal_mhz'] else f"⚠️ {r['status']}"
+        status_str = f"OK {r['optimal_mhz']} MHz" if r['optimal_mhz'] else f"WARN {r['status']}"
         print(f"  {r['model']:30s} {status_str}")
 
     optimal_mhz_values = [r['optimal_mhz'] for r in results if r['optimal_mhz']]
