@@ -1,0 +1,197 @@
+{
+  "timestamp": "2026-06-11T20:53:00.094492",
+  "capabilities": "clock",
+  "phase_a": [
+    {
+      "t": 0,
+      "temp": 74,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 1,
+      "temp": 74,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 2,
+      "temp": 75,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 3,
+      "temp": 75,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 4,
+      "temp": 75,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 5,
+      "temp": 75,
+      "clock": 855,
+      "profile": "balanced"
+    },
+    {
+      "t": 6,
+      "temp": 76,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 7,
+      "temp": 76,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 8,
+      "temp": 76,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 9,
+      "temp": 76,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 10,
+      "temp": 76,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 11,
+      "temp": 77,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 12,
+      "temp": 77,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 13,
+      "temp": 77,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 14,
+      "temp": 77,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 15,
+      "temp": 77,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 16,
+      "temp": 78,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 17,
+      "temp": 78,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 18,
+      "temp": 78,
+      "clock": 855,
+      "profile": "quiet"
+    },
+    {
+      "t": 19,
+      "temp": 78,
+      "clock": 855,
+      "profile": "quiet"
+    }
+  ],
+  "phase_b": [
+    {
+      "t": 0,
+      "temp": 78,
+      "clock": 855,
+      "power": 64.14
+    },
+    {
+      "t": 1,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.13
+    },
+    {
+      "t": 2,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.45
+    },
+    {
+      "t": 3,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.59
+    },
+    {
+      "t": 4,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.19
+    },
+    {
+      "t": 5,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.26
+    },
+    {
+      "t": 6,
+      "temp": 79,
+      "clock": 855,
+      "power": 65.81
+    },
+    {
+      "t": 7,
+      "temp": 80,
+      "clock": 855,
+      "power": 65.31
+    }
+  ],
+  "phase_c": {
+    "reset_ok": true,
+    "temp": 80,
+    "clock": 855,
+    "clock_locked": false,
+    "power_limit_final": -1.0
+  },
+  "actions": [
+    {
+      "phase": "A",
+      "t": 0,
+      "temp": 74,
+      "action": "None -> balanced"
+    },
+    {
+      "phase": "A",
+      "t": 6,
+      "temp": 76,
+      "action": "balanced -> quiet"
+    }
+  ]
+}

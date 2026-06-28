@@ -1,17 +1,19 @@
 @echo off
 chcp 65001 >nul
-title 🏛️ TEMPLE IAM
-color 0B
+title ODIN VISION - Dashboard Web
 
 echo.
 echo ╔══════════════════════════════════════════════════════════════════╗
 echo ║                                                                  ║
-echo ║   🏛️ TEMPLE IAM - Bienvenue !                                  ║
+echo ║   👁️ ODIN VISION - Dashboard Web                                ║
 echo ║                                                                  ║
 echo ╚══════════════════════════════════════════════════════════════════╝
 echo.
-echo   Redirection vers le menu principal...
+echo   🚀 Démarrage du serveur...
 echo.
 
-:: Lancer le menu principal
-call "%~dp0TEMPLE_IAM.bat"
+cd /d "%~dp0agents\odin_vision"
+python odin_web.py
+
+pause
+

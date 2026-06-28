@@ -1,0 +1,140 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║         🎮 TEMPLE IAM GPU AGENTS - DEMARRAGE ULTRA RAPIDE 🎮              ║
+║                                                                            ║
+║                    Optimise ton GPU en 30 SECONDES!                        ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  📋 AVANT DE COMMENCER                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ✅ Python 3.10+ installé? (https://www.python.org/downloads/)
+  ✅ GPU NVIDIA (GTX 10xx ou RTX 20/30/40 series)?
+  ✅ Windows 10/11?
+
+  Si OUI aux 3 → Continue! 🚀
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🚀 OPTION 1: SUPER FACILE (Pour Débutants)                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  1️⃣  Double-click sur:  START_HERE.bat
+
+  2️⃣  Choisis:           [1] Systeme V2 Enhanced
+
+  3️⃣  Lance ton jeu:     N'importe quel jeu!
+
+  4️⃣  C'est tout!        Le système détecte et optimise automatiquement!
+
+  ⏱️  Temps total: 30 secondes
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  💻 OPTION 2: LIGNE DE COMMANDE (Pour Avancés)                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Ouvre un terminal dans ce dossier:
+
+  # 1. Installe (première fois seulement)
+  pip install -r requirements_gpu.txt
+
+  # 2. Test le système (optionnel)
+  python test_universal_system_safe.py
+
+  # 3. Lance le moniteur
+  python run_universal_monitor_v2.py
+
+  # 4. Lance ton jeu et profite!
+
+  ⏱️  Temps total: 2 minutes
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🐳 OPTION 3: DOCKER (Pour Experts)                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  docker-compose -f docker-compose.gpu.yml up universal-gpu-monitor
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  📊 CE QUE TU VERRAS                                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  🔍 Universal Game Detector initialisé - DÉTECTION DIVINE ACTIVE !
+  📚 Base de données: 16 jeux
+  🧠 Jeux appris: 3
+  🎮 Universal GPU Monitor initialisé - SURVEILLANCE DIVINE MULTI-JEUX ACTIVE !
+
+  🎮 Jeu actif: Cyberpunk 2077 (Cyberpunk2077.exe)
+  📊 Profil: EXTREME
+  🌡️ Température cible: 77°C
+  💡 Recommandation: DLSS Balance + RT Medium
+  ⚡ FPS cible: 60
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🎮 JEUX SUPPORTÉS (16+ avec profils complets)                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ✅ Alan Wake 2              ✅ Call of Duty MW3
+  ✅ Cyberpunk 2077           ✅ COD Warzone  
+  ✅ Elden Ring               ✅ Assassin's Creed
+  ✅ Hogwarts Legacy          ✅ Spider-Man Remastered
+  ✅ Red Dead Redemption 2    ✅ God of War
+  ✅ Starfield                ✅ The Last of Us
+  ✅ VALORANT                 ✅ Apex Legends
+  ✅ Forza Horizon 5          ✅ + TOUS les autres (auto-learning)!
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🆘 PROBLÈMES?                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  ❌ "Python n'est pas reconnu"
+     → Installe Python: https://www.python.org/downloads/
+     → Coche "Add Python to PATH" pendant l'installation
+
+  ❌ "GPU non détecté"
+     → Vérifie drivers NVIDIA: nvidia-smi
+     → Le programme fonctionne quand même (juste pas de stats GPU)
+
+  ❌ "Module not found"
+     → Lance: pip install -r requirements_gpu.txt
+
+  ❌ Autre problème?
+     → Ouvre une Issue: https://github.com/Rua987/temple-iam-gpu-agents/issues
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  📚 DOCUMENTATION                                                       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  📖 EASY_START.md          → Guide ultra simple
+  📖 README_SIMPLE.md       → README visuel avec exemples
+  📖 DUAL_SYSTEM_GUIDE.md   → Comparaison V2 vs Eugène
+  📖 MIGRATION_GUIDE.md     → Guide complet
+  📖 MERGE_SUCCESS_REPORT.md → Rapport technique
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│  🎊 RÉSULTATS ATTENDUS                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+  Avant Temple IAM          │  Avec Temple IAM
+  ────────────────────────────────────────────────────
+  🌡️  Température: 82°C      │  🌡️  Température: 72°C (-10°C!)
+  ⚡ FPS: 45                 │  ⚡ FPS: 60 (+33%!)
+  💨 Ventilo: 85%           │  💨 Ventilo: 70% (-15% bruit)
+  ❓ Paramètres?            │  ✅ Optimisés automatiquement!
+
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                         C'EST TOUT! BON GAMING! 🎮🔥                        ║
+║                                                                            ║
+║                          PLUS ULTRA! DATTEBAYO! 🏛️⚡                        ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝

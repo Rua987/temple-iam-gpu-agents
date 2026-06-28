@@ -87,6 +87,7 @@ class GamesDatabase:
                 recommended_gpu_usage=85.0,
                 thermal_profile="high",
                 optimization_hints=[
+                    "🔥 HIGH - Cible 70°C",
                     "DLSS Quality mode recommandé",
                     "Ray Tracing Medium pour équilibre",
                     "Mesh Shader activation pour RTX 30xx+",
@@ -96,7 +97,7 @@ class GamesDatabase:
                     "target_fps": 60,
                     "dlss_mode": "quality",
                     "ray_tracing": "medium",
-                    "target_temp": 75
+                    "target_temp": 70  # HIGH = 70°C
                 }
             ),
 
@@ -115,16 +116,17 @@ class GamesDatabase:
                 recommended_gpu_usage=80.0,
                 thermal_profile="extreme",
                 optimization_hints=[
-                    "DLSS Balance pour RT activé",
-                    "RT Lighting + Reflections prioritaires",
-                    "Crowd Density réduction pour CPU",
-                    "Async Compute pour Ampere+"
+                    "🔥🔥 EXTREME - Cible 83°C (Laptop Gaming)",
+                    "DLSS Performance/Ultra Performance recommandé",
+                    "RT désactivé pour meilleures perfs",
+                    "Crowd Density LOW pour réduire CPU",
+                    "Async Compute activé"
                 ],
                 default_settings={
-                    "target_fps": 60,
-                    "dlss_mode": "balance",
-                    "ray_tracing": "medium",
-                    "target_temp": 77
+                    "target_fps": 45,  # Réaliste pour laptop
+                    "dlss_mode": "performance",
+                    "ray_tracing": "off",
+                    "target_temp": 83  # LAPTOP GAMING - 83°C acceptable
                 }
             ),
 
@@ -141,15 +143,16 @@ class GamesDatabase:
                 supports_fsr=False,
                 vram_requirement_gb=6.0,
                 recommended_gpu_usage=70.0,
-                thermal_profile="medium",
+                thermal_profile="high",  # HIGH au lieu de medium
                 optimization_hints=[
+                    "🎮 HIGH - Cible 82°C (Laptop Gaming)",
                     "FPS cap 60 (limite moteur)",
                     "Anti-aliasing prioritaire",
                     "Shader optimizations importantes"
                 ],
                 default_settings={
                     "target_fps": 60,
-                    "target_temp": 70
+                    "target_temp": 82  # LAPTOP GAMING
                 }
             ),
 
@@ -482,6 +485,261 @@ class GamesDatabase:
                     "dlss_mode": "quality",
                     "ray_tracing": "medium",
                     "target_temp": 73
+                }
+            ),
+
+            # ========== JEUX ULTRA LOURDS (Profil ULTRA - Cible 65°C) ==========
+            # Ces jeux nécessitent un refroidissement AGRESSIF car ils chauffent VITE !
+
+            GameProfile(
+                name="teardown",
+                display_name="Teardown",
+                process_names=["teardown.exe", "Teardown.exe"],
+                exe_names=["teardown.exe", "Teardown.exe"],
+                platforms=[GamePlatform.STEAM],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=False,
+                supports_ray_tracing=False,  # Voxel-based, pas de RT classique
+                supports_fsr=False,
+                vram_requirement_gb=8.0,
+                recommended_gpu_usage=90.0,  # TRÈS gourmand
+                thermal_profile="ultra",  # NOUVEAU PROFIL ULTRA !
+                optimization_hints=[
+                    "🔥 JEU TRÈS LOURD - Destruction physique en temps réel",
+                    "Refroidissement AGRESSIF activé - Cible 65°C",
+                    "Réduire Draw Distance si FPS instable",
+                    "Voxel rendering = charge GPU massive",
+                    "Beaucoup d'animations graphiques = température variable"
+                ],
+                default_settings={
+                    "target_fps": 60,
+                    "target_temp": 65  # CIBLE BASSE pour jeu ultra lourd
+                }
+            ),
+
+            GameProfile(
+                name="cities_skylines_2",
+                display_name="Cities: Skylines II",
+                process_names=["Cities2.exe", "CitiesSkylines2.exe"],
+                exe_names=["Cities2.exe"],
+                platforms=[GamePlatform.STEAM, GamePlatform.XBOX_PC],
+                engine=GameEngine.UNITY,
+                supports_dlss=True,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=10.0,
+                recommended_gpu_usage=95.0,
+                thermal_profile="ultra",
+                optimization_hints=[
+                    "🔥 TRÈS LOURD - Simulation massive",
+                    "Refroidissement AGRESSIF - Cible 65°C",
+                    "DLSS Performance recommandé",
+                    "Réduire Level of Detail pour grandes villes"
+                ],
+                default_settings={
+                    "target_fps": 30,
+                    "dlss_mode": "performance",
+                    "target_temp": 65
+                }
+            ),
+
+            GameProfile(
+                name="flight_simulator_2020",
+                display_name="Microsoft Flight Simulator",
+                process_names=["FlightSimulator.exe", "MSFS.exe"],
+                exe_names=["FlightSimulator.exe"],
+                platforms=[GamePlatform.STEAM, GamePlatform.XBOX_PC],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=True,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=11.0,
+                recommended_gpu_usage=95.0,
+                thermal_profile="ultra",
+                optimization_hints=[
+                    "🔥 TRÈS LOURD - Streaming terrain temps réel",
+                    "Refroidissement AGRESSIF - Cible 65°C",
+                    "DLSS Quality pour visuel + perf",
+                    "Terrain LOD réduction si besoin"
+                ],
+                default_settings={
+                    "target_fps": 30,
+                    "dlss_mode": "quality",
+                    "target_temp": 65
+                }
+            ),
+
+            GameProfile(
+                name="dwarf_fortress",
+                display_name="Dwarf Fortress",
+                process_names=["Dwarf Fortress.exe", "dwarfort.exe"],
+                exe_names=["Dwarf Fortress.exe"],
+                platforms=[GamePlatform.STEAM],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=False,
+                supports_ray_tracing=False,
+                supports_fsr=False,
+                vram_requirement_gb=4.0,
+                recommended_gpu_usage=80.0,
+                thermal_profile="ultra",  # CPU/GPU lourd avec simulation
+                optimization_hints=[
+                    "🔥 Simulation MASSIVE - CPU et GPU",
+                    "Refroidissement proactif activé",
+                    "FPS cap recommandé"
+                ],
+                default_settings={
+                    "target_fps": 60,
+                    "target_temp": 65
+                }
+            ),
+
+            GameProfile(
+                name="satisfactory",
+                display_name="Satisfactory",
+                process_names=["FactoryGame-Win64-Shipping.exe", "Satisfactory.exe"],
+                exe_names=["FactoryGame-Win64-Shipping.exe"],
+                platforms=[GamePlatform.STEAM, GamePlatform.EPIC_GAMES],
+                engine=GameEngine.UNREAL_ENGINE_5,
+                supports_dlss=True,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=8.0,
+                recommended_gpu_usage=85.0,
+                thermal_profile="ultra",
+                optimization_hints=[
+                    "🔥 TRÈS LOURD avec grandes usines",
+                    "Refroidissement proactif - Cible 65°C",
+                    "DLSS Balance recommandé",
+                    "View Distance réduction pour méga-usines"
+                ],
+                default_settings={
+                    "target_fps": 60,
+                    "dlss_mode": "balance",
+                    "target_temp": 65
+                }
+            ),
+
+            # ========== JEUX ESPORT (Profil ESPORT - Priorité FPS, tolère 80°C) ==========
+
+            GameProfile(
+                name="counter_strike_2",
+                display_name="Counter-Strike 2",
+                process_names=["cs2.exe", "csgo.exe"],
+                exe_names=["cs2.exe"],
+                platforms=[GamePlatform.STEAM],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=False,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=4.0,
+                recommended_gpu_usage=60.0,
+                thermal_profile="esport",  # PRIORITÉ FPS !
+                optimization_hints=[
+                    "🎯 PRIORITÉ FPS - Compétitif",
+                    "Tolère température plus élevée pour max FPS",
+                    "Low settings pour visibilité",
+                    "FPS cap 300+ recommandé"
+                ],
+                default_settings={
+                    "target_fps": 300,
+                    "target_temp": 80
+                }
+            ),
+
+            GameProfile(
+                name="overwatch_2",
+                display_name="Overwatch 2",
+                process_names=["Overwatch.exe"],
+                exe_names=["Overwatch.exe"],
+                platforms=[GamePlatform.BATTLE_NET],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=False,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=6.0,
+                recommended_gpu_usage=65.0,
+                thermal_profile="esport",
+                optimization_hints=[
+                    "🎯 PRIORITÉ FPS - Compétitif",
+                    "Low/Medium settings pour visibilité",
+                    "Render scale 100% recommandé"
+                ],
+                default_settings={
+                    "target_fps": 144,
+                    "target_temp": 78
+                }
+            ),
+
+            GameProfile(
+                name="league_of_legends",
+                display_name="League of Legends",
+                process_names=["League of Legends.exe", "LeagueClient.exe"],
+                exe_names=["League of Legends.exe"],
+                platforms=[GamePlatform.STANDALONE],
+                engine=GameEngine.UNKNOWN,
+                supports_dlss=False,
+                supports_ray_tracing=False,
+                supports_fsr=False,
+                vram_requirement_gb=2.0,
+                recommended_gpu_usage=40.0,
+                thermal_profile="esport",
+                optimization_hints=[
+                    "🎯 Jeu léger - Max FPS facile",
+                    "GPU devrait rester frais",
+                    "Uncapped FPS recommandé"
+                ],
+                default_settings={
+                    "target_fps": 240,
+                    "target_temp": 70
+                }
+            ),
+
+            GameProfile(
+                name="fortnite",
+                display_name="Fortnite",
+                process_names=["FortniteClient-Win64-Shipping.exe", "Fortnite.exe"],
+                exe_names=["FortniteClient-Win64-Shipping.exe"],
+                platforms=[GamePlatform.EPIC_GAMES],
+                engine=GameEngine.UNREAL_ENGINE_5,
+                supports_dlss=True,
+                supports_ray_tracing=False,
+                supports_fsr=True,
+                vram_requirement_gb=4.0,
+                recommended_gpu_usage=60.0,
+                thermal_profile="esport",
+                optimization_hints=[
+                    "🎯 PRIORITÉ FPS - Battle Royale",
+                    "Performance mode recommandé",
+                    "DLSS Performance pour max FPS"
+                ],
+                default_settings={
+                    "target_fps": 144,
+                    "dlss_mode": "performance",
+                    "target_temp": 78
+                }
+            ),
+
+            GameProfile(
+                name="rocket_league",
+                display_name="Rocket League",
+                process_names=["RocketLeague.exe"],
+                exe_names=["RocketLeague.exe"],
+                platforms=[GamePlatform.EPIC_GAMES, GamePlatform.STEAM],
+                engine=GameEngine.UNREAL_ENGINE_4,
+                supports_dlss=False,
+                supports_ray_tracing=False,
+                supports_fsr=False,
+                vram_requirement_gb=2.0,
+                recommended_gpu_usage=50.0,
+                thermal_profile="esport",
+                optimization_hints=[
+                    "🎯 PRIORITÉ FPS - Compétitif rapide",
+                    "Jeu léger - GPU devrait rester frais",
+                    "Uncapped FPS recommandé"
+                ],
+                default_settings={
+                    "target_fps": 250,
+                    "target_temp": 70
                 }
             ),
         ]
