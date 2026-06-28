@@ -69,6 +69,29 @@ Full Docker details: [README-DOCKER.md](README-DOCKER.md).
 
 ---
 
+## Autonomous tuning (experimental)
+
+`gpu_autoresearch.py` runs an **active experiment** instead of relying on fixed
+profiles: it sweeps a set of GPU clock caps, holds each for a measurement
+window, records the real temperature / utilisation / power (nvidia-smi) and FPS
+(RTSS/PresentMon when available), then locks in the most efficient cap for the
+current game and remembers it.
+
+```bash
+# Quick idle demo of the sweep mechanics (no game needed)
+python gpu_autoresearch.py
+```
+
+For a real run, call `run_sweep(game, fps_provider=...)` with an FPS source
+while the game runs. Notes:
+
+- A temperature guard aborts the sweep, and clocks are always reset (or the
+  chosen optimum applied) when it ends.
+- Without an FPS signal (no game / no RTSS) it still sweeps and reports the
+  thermal data, but picks a cap by a utilisation proxy and flags
+  `fps_signal=False` — the meaningful FPS-vs-temperature trade-off only appears
+  under real gameplay.
+
 ## Configuration
 
 Optional `.env` file:
