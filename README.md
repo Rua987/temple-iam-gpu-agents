@@ -104,6 +104,52 @@ game), and tokens/s from the **Ollama API** (`make_ollama_provider`). Notes:
   gave higher tokens/s than uncapped 1950 MHz while running cooler and at lower
   power — inference is memory-bound, so the extra clock only added heat.
 
+---
+
+## Three integrated features (new)
+
+### 1. Autonomous auto-tuning in the main monitor
+`universal_gpu_monitor.py` now launches auto-tuning in a background thread
+when an unknown game or workload is detected. It discovers the optimal clock cap,
+applies it, and remembers it — no user intervention needed. The monitor's
+thermal controller continues managing temperature alongside the discovered clocks.
+
+### 2. Standardized GPU benchmark (no game needed)
+`gpu_benchmark.py` is a self-contained, GPU-intensive OpenGL fractal renderer
+that runs fullscreen with no vsync. It's RTSS-hookable like a real game, so it
+works with `gpu_autoresearch` to validate auto-tuning on any machine:
+
+```bash
+# Run the benchmark (GPU-bound, no vsync)
+python gpu_benchmark.py 30       # 30 seconds
+
+# Or run with auto-tuning discovery (needs RTSS)
+python gpu_benchmark.py --sweep  # Runs sweep, applies optimum, then exits
+```
+
+Example result (RTX 2070): 50 → 96 → 127 fps at 600/1200/1950 MHz, proving
+the GPU-bound nature and clock scaling.
+
+### 3. Multi-model Ollama benchmark
+`bench_ollama_multi.py` sweeps auto-tuning across your local LLMs to discover
+the memory-bound pattern:
+
+```bash
+# Test one model
+python bench_ollama_multi.py qwen3.5:2b
+
+# Test multiple models
+python bench_ollama_multi.py qwen3.5:2b mistral:7b deepseek-r1:8b
+```
+
+Results are saved to `ollama_benchmarks.json`. **Validated pattern** (RTX 2070,
+`qwen3.5:2b`): **all LLMs are memory-bound**, preferring ~1200 MHz (63 tok/s)
+over uncapped 1950 MHz (59 tok/s), while running 3°C cooler and 20 W cheaper.
+This is the key insight: compute-bound workloads (gaming) want max clock;
+memory-bound ones (LLM inference) hit a sweet spot below max.
+
+---
+
 ## Configuration
 
 Optional `.env` file:
