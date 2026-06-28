@@ -138,9 +138,11 @@ class GPURealController:
 
     def __init__(self):
         self.nvidia_smi_path = self._find_nvidia_smi()
+        self.power_info = self._query_power_info()
         self.capabilities = self._detect_capabilities()
         self.current_profile: Optional[str] = None
         self.current_clock_limit: Optional[Tuple[int, int]] = None
+        self.current_power_limit_w: Optional[int] = None
         self.is_clock_locked = False
 
         # Stats de controle
@@ -154,6 +156,8 @@ class GPURealController:
         logging.info("GPU Real Controller initialise")
         logging.info(f"nvidia-smi: {self.nvidia_smi_path}")
         logging.info(f"Capacites: {self.capabilities.value}")
+        if self.capabilities == GPUControlCapability.FULL and self.power_info.get('default'):
+            logging.info(f"Power limit controlable (defaut {self.power_info['default']}W)")
 
     def _find_nvidia_smi(self) -> str:
         """Trouve le chemin de nvidia-smi"""
@@ -199,16 +203,20 @@ class GPURealController:
                 timeout=5
             )
 
-            # Test power limit
-            result = subprocess.run(
-                [self.nvidia_smi_path, '-pl', '100'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-
-            if 'not supported' not in result.stdout.lower() and 'not supported' not in result.stderr.lower():
-                return GPUControlCapability.FULL
+            # Test power-limit support WITHOUT changing the effective limit:
+            # probe with the GPU's own default value, so a supporting GPU just
+            # re-applies its default (no-op) instead of being dropped to 100W.
+            default_pl = self.power_info.get('default')
+            if default_pl:
+                result = subprocess.run(
+                    [self.nvidia_smi_path, '-pl', str(default_pl)],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                out = (result.stdout + result.stderr).lower()
+                if 'not supported' not in out and result.returncode == 0:
+                    return GPUControlCapability.FULL
 
             return GPUControlCapability.CLOCK_ONLY
 
@@ -342,6 +350,86 @@ class GPURealController:
             logging.error(f"Erreur reset_gpu_clocks: {e}")
             return False
 
+    def _query_power_info(self) -> Dict[str, Optional[int]]:
+        """Lit les limites de puissance (defaut/min/max) en watts. Lecture seule.
+
+        nvidia-smi -q -d POWER peut afficher plusieurs blocs (dont des N/A) :
+        on garde la PREMIERE valeur reelle de chaque champ.
+        """
+        info: Dict[str, Optional[int]] = {'default': None, 'min': None, 'max': None}
+        try:
+            import re
+            result = subprocess.run(
+                [self.nvidia_smi_path, '-q', '-d', 'POWER'],
+                capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.splitlines():
+                if ':' not in line:
+                    continue
+                key, val = line.split(':', 1)
+                key, val = key.strip(), val.strip()
+                m = re.search(r'([\d.]+)', val)
+                if not m:
+                    continue
+                watts = int(float(m.group(1)))
+                if key == 'Default Power Limit' and info['default'] is None:
+                    info['default'] = watts
+                elif key == 'Min Power Limit' and info['min'] is None:
+                    info['min'] = watts
+                elif key == 'Max Power Limit' and info['max'] is None:
+                    info['max'] = watts
+        except Exception as e:
+            logging.error(f"Erreur lecture power info: {e}")
+        return info
+
+    def set_power_limit(self, watts: int) -> bool:
+        """CONTROLE REEL : regle la limite de puissance (nvidia-smi -pl).
+
+        Gate sur la capacite FULL : sur un GPU qui ne supporte pas le power
+        limit (beaucoup de GeForce), on ne fait RIEN et on le dit clairement.
+        """
+        if self.capabilities != GPUControlCapability.FULL:
+            logging.info(f"Power limit non supporte sur ce GPU (capacite: {self.capabilities.value}) - ignore")
+            return False
+
+        lo = self.power_info.get('min') or 1
+        hi = self.power_info.get('max') or watts
+        watts = max(lo, min(hi, int(watts)))
+        try:
+            result = subprocess.run(
+                [self.nvidia_smi_path, '-pl', str(watts)],
+                capture_output=True, text=True, timeout=5
+            )
+            out = (result.stdout + result.stderr).lower()
+            if 'not supported' in out:
+                logging.info("Power limit non supporte (driver) - ignore")
+                return False
+            if result.returncode == 0:
+                self.current_power_limit_w = watts
+                self.control_stats['last_action'] = f'set_power_limit({watts}W)'
+                self.control_stats['last_action_time'] = time.time()
+                logging.info(f"Power limit REGLE: {watts}W")
+                return True
+            logging.error(f"Erreur set power limit: {result.stdout} {result.stderr}")
+            return False
+        except Exception as e:
+            logging.error(f"Erreur set_power_limit: {e}")
+            return False
+
+    def set_power_limit_pct(self, pct: float) -> bool:
+        """Regle la limite de puissance a pct (0.0-1.0) du defaut."""
+        default = self.power_info.get('default')
+        if not default:
+            return False
+        return self.set_power_limit(int(round(default * pct)))
+
+    def reset_power_limit(self) -> bool:
+        """Restaure la limite de puissance par defaut."""
+        default = self.power_info.get('default')
+        if default and self.capabilities == GPUControlCapability.FULL:
+            return self.set_power_limit(default)
+        return False
+
     def apply_profile(self, profile_name: str) -> bool:
         """Applique un profil de clocks pre-defini"""
         if profile_name not in self.CLOCK_PROFILES:
@@ -354,6 +442,13 @@ class GPURealController:
         if success:
             self.current_profile = profile_name
             logging.info(f"Profil '{profile.name}' applique: {profile.description}")
+
+            # Sur les GPU qui le supportent, on plafonne AUSSI la puissance,
+            # proportionnellement au cap de clock (clock plus bas -> moins de
+            # watts). Sur la 2070 (CLOCK_ONLY) cet appel ne fait rien.
+            if self.capabilities == GPUControlCapability.FULL:
+                pct = max(0.5, min(1.0, profile.max_clock_mhz / 2100))
+                self.set_power_limit_pct(pct)
 
         return success
 
