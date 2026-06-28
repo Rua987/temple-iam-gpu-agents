@@ -32,6 +32,8 @@ from universal_game_detector import GAME_DETECTOR, DetectedGame
 from games_database import GAMES_DB
 from gpu_ml_logger import ML_LOGGER
 from workload_thermal_controller import WorkloadThermalController
+import gpu_autoresearch
+from rtss_reader import RTSSReader
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='🎮 %(asctime)s - %(levelname)s - %(message)s')
@@ -64,6 +66,11 @@ class UniversalGPUMonitor:
         # Jeu actuellement surveillé
         self.current_game: Optional[DetectedGame] = None
         self.current_game_profile: Optional[Dict[str, Any]] = None
+
+        # Auto-tuning: track tuned workloads to avoid re-tuning
+        self.tuned_workloads: Dict[str, int] = {}  # {workload_name: optimal_mhz}
+        self.tuning_thread: Optional[threading.Thread] = None
+        self.tuning_in_progress = False
 
         # Seuils d'alerte dynamiques (mis à jour selon le jeu)
         self.alert_thresholds = {
@@ -220,6 +227,9 @@ class UniversalGPUMonitor:
                     logging.info(f"✅ Profil connu appliqué: {self.current_game_profile['thermal_profile']}")
                 else:
                     logging.info(f"📋 Profil {mode} appliqué (cible {self.current_game_profile['target_temp']}°C)")
+                    # Launch auto-tuning in background for unknown/new workloads
+                    if game.custom_name not in self.tuned_workloads:
+                        self._start_auto_tuning_thread(game.custom_name, is_gaming=(category == 'gaming'))
             else:
                 self.current_game = None
                 self.current_game_profile = None
@@ -574,6 +584,52 @@ class UniversalGPUMonitor:
             print(f"Température max: {max_gpu_temp:.1f}°C")
             print(f"Alertes générées: {len(self.alert_history)}")
             print("="*80)
+
+    def _start_auto_tuning_thread(self, workload_name: str, is_gaming: bool = True):
+        """Launch auto-tuning in a background thread (non-blocking)."""
+        if self.tuning_in_progress:
+            logging.info(f"🔄 Auto-tuning déjà en cours, {workload_name} en attente")
+            return
+        self.tuning_in_progress = True
+        self.tuning_thread = threading.Thread(
+            target=self._auto_tune_worker,
+            args=(workload_name, is_gaming),
+            daemon=True
+        )
+        self.tuning_thread.start()
+
+    def _auto_tune_worker(self, workload_name: str, is_gaming: bool):
+        """Worker thread: run the auto-tuning sweep and apply the result."""
+        try:
+            logging.info(f"🚀 Auto-tuning de '{workload_name}' (gaming={is_gaming}) - durée ~30s")
+
+            # Prepare perf provider for gaming (RTSS FPS) or just use default (None = proxy)
+            perf_provider = None
+            if is_gaming:
+                rtss = RTSSReader()
+                if rtss.available:
+                    perf_provider = lambda: rtss.read_max_fps(workload_name)
+
+            # Run the sweep
+            optimal_mhz = gpu_autoresearch.auto_tune_workload(
+                workload_name=workload_name,
+                perf_provider=perf_provider,
+                perf_unit="fps" if is_gaming else "tok/s",
+                is_gaming=is_gaming,
+                duration_s=30.0  # Total sweep time
+            )
+
+            if optimal_mhz:
+                self.tuned_workloads[workload_name] = optimal_mhz
+                logging.info(f"✅ Auto-tuning '{workload_name}': optimum = {optimal_mhz}MHz")
+            else:
+                logging.warning(f"⚠️ Auto-tuning '{workload_name}' inconclusive (GPU read-only or no signal)")
+
+        except Exception as e:
+            logging.error(f"❌ Auto-tuning error for '{workload_name}': {e}")
+        finally:
+            self.tuning_in_progress = False
+
 
 def main():
     """Point d'entrée principal"""

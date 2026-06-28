@@ -320,6 +320,37 @@ def _demo_game(name_filter: Optional[str] = None):
     tuner.controller.reset_gpu_clocks()
 
 
+# --------------------------------------------------------------------------
+# Convenience API for integration into other tools (e.g., the monitor)
+# --------------------------------------------------------------------------
+def auto_tune_workload(workload_name: str, perf_provider: Optional[Callable[[], float]] = None,
+                       perf_unit: str = "fps", is_gaming: bool = True, duration_s: float = 30.0) -> Optional[int]:
+    """Run a quick sweep and return the optimal clock cap (MHz), or None if not available.
+
+    Picks clock levels based on workload type (gaming uses higher caps, LLM uses lower).
+    Designed for integration into monitors: launches a single sweep, applies the result,
+    and returns the optimal clock so the caller can log/display it.
+    """
+    try:
+        tuner = GPUAutoResearch()
+        if tuner.controller.capabilities == GPUControlCapability.READ_ONLY:
+            return None  # GPU is read-only, can't tune
+        levels = GPUAutoResearch.GAMING_LEVELS if is_gaming else GPUAutoResearch.LLM_LEVELS
+        res = tuner.run_sweep(
+            workload=workload_name,
+            perf_provider=perf_provider,
+            perf_unit=perf_unit,
+            levels=levels,
+            window_s=duration_s / len(levels),  # divide budget evenly
+            settle_s=2.0,
+            sample_interval=1.0,
+        )
+        return res.optimal_clock_mhz
+    except Exception as e:
+        logging.error(f"Auto-tuning '{workload_name}' failed: {e}")
+        return None
+
+
 if __name__ == "__main__":
     import sys
     mode = sys.argv[1] if len(sys.argv) >= 2 else ""
