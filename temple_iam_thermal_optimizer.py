@@ -1323,10 +1323,9 @@ class TempleIAMThermalOptimizer:
                             f"GPU Clocks: {profile_info.max_clock_mhz}MHz max ({profile_info.name})"
                         )
 
-            # Optimisation priorite processus (toujours disponible)
-            if level >= 3:
-                if self._optimize_process_priority():
-                    optimizations_applied.append("Priorite processus optimisee")
+            # Note: the only real action applied is the GPU clock profile
+            # (auto_adjust_for_temperature) above. Fan, power-limit, voltage,
+            # memory and process-priority tuning were never implemented.
 
             # Mise a jour de l'etat
             if optimizations_applied:
@@ -1356,67 +1355,6 @@ class TempleIAMThermalOptimizer:
 
         except Exception as e:
             logging.error(f"❌ Erreur application optimisations: {str(e)}")
-    
-    def _optimize_fan_speed(self, target_speed: int) -> bool:
-        """Optimisation vitesse ventilateur - VENTILATION DIVINE ! 💨"""
-        try:
-            # Simulation d'optimisation ventilateur
-            # En réalité, cela utiliserait des outils comme nvidia-smi
-            logging.info(f"💨 Optimisation ventilateur: {target_speed}%")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation ventilateur: {str(e)}")
-            return False
-    
-    def _optimize_power_limit(self, target_limit: int) -> bool:
-        """Optimisation limite de puissance - PUISSANCE DIVINE ! ⚡"""
-        try:
-            # Simulation d'optimisation limite de puissance
-            logging.info(f"⚡ Optimisation puissance: {target_limit}%")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation puissance: {str(e)}")
-            return False
-    
-    def _optimize_clock_speed(self, clock_offset: int) -> bool:
-        """Optimisation vitesse d'horloge - HORLOGE DIVINE ! ⏰"""
-        try:
-            # Simulation d'optimisation horloge
-            logging.info(f"⏰ Optimisation horloge: {clock_offset:+d}MHz")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation horloge: {str(e)}")
-            return False
-    
-    def _optimize_memory_clock(self, memory_offset: int) -> bool:
-        """Optimisation horloge mémoire - MÉMOIRE DIVINE ! 🧠"""
-        try:
-            # Simulation d'optimisation mémoire
-            logging.info(f"🧠 Optimisation mémoire: {memory_offset:+d}MHz")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation mémoire: {str(e)}")
-            return False
-    
-    def _optimize_voltage(self, voltage_offset: int) -> bool:
-        """Optimisation tension - TENSION DIVINE ! 🔋"""
-        try:
-            # Simulation d'optimisation tension
-            logging.info(f"🔋 Optimisation tension: {voltage_offset:+d}mV")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation tension: {str(e)}")
-            return False
-    
-    def _optimize_process_priority(self) -> bool:
-        """Optimisation priorité processus - PRIORITÉ DIVINE ! 🎯"""
-        try:
-            # Optimisation des processus système pour réduire la charge
-            logging.info("🎯 Optimisation priorité processus")
-            return True
-        except Exception as e:
-            logging.error(f"❌ Erreur optimisation priorité: {str(e)}")
-            return False
     
     def _restore_normal_parameters(self):
         """Restauration des parametres normaux - Reset GPU REEL !"""
