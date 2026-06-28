@@ -46,3 +46,8 @@ debug_log.txt
 # ML data (user-specific learning data)
 gpu_ml_data/
 learned_games.json
+
+# Large unrelated trees and junk (not part of the GPU tool)
+agents/
+my-video/
+nul
