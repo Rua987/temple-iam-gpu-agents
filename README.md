@@ -73,24 +73,36 @@ Full Docker details: [README-DOCKER.md](README-DOCKER.md).
 
 `gpu_autoresearch.py` runs an **active experiment** instead of relying on fixed
 profiles: it sweeps a set of GPU clock caps, holds each for a measurement
-window, records the real temperature / utilisation / power (nvidia-smi) and FPS
-(RTSS/PresentMon when available), then locks in the most efficient cap for the
-current game and remembers it.
+window, records the real temperature / utilisation / power / VRAM (nvidia-smi)
+plus a performance signal, then locks in the most efficient cap for the current
+workload and remembers it. It works for **games** (FPS) and **local LLMs**
+(tokens/second).
 
 ```bash
-# Quick idle demo of the sweep mechanics (no game needed)
+# Idle demo of the sweep mechanics (no game/model needed)
 python gpu_autoresearch.py
+
+# Real gaming run — launch the game first, with MSI Afterburner / RTSS
+# running and its FPS overlay on; optional process-name filter:
+python gpu_autoresearch.py game cyberpunk
+
+# Real local-LLM run via Ollama (sweeps lower clocks; inference is memory-bound)
+python gpu_autoresearch.py llm qwen3.5:2b
 ```
 
-For a real run, call `run_sweep(game, fps_provider=...)` with an FPS source
-while the game runs. Notes:
+The performance signal is pluggable: FPS comes from **RTSS shared memory**
+(`make_rtss_fps_provider`, needs RTSS/MSI Afterburner running and hooking the
+game), and tokens/s from the **Ollama API** (`make_ollama_provider`). Notes:
 
 - A temperature guard aborts the sweep, and clocks are always reset (or the
   chosen optimum applied) when it ends.
-- Without an FPS signal (no game / no RTSS) it still sweeps and reports the
-  thermal data, but picks a cap by a utilisation proxy and flags
-  `fps_signal=False` — the meaningful FPS-vs-temperature trade-off only appears
-  under real gameplay.
+- Without a performance signal (no game hooked / no RTSS) it still sweeps and
+  reports the thermal data, but picks a cap by a utilisation proxy and flags
+  `perf_signal=False` — the meaningful perf-vs-temperature trade-off only
+  appears under a real workload.
+- Measured example (RTX 2070, `qwen3.5:2b` via Ollama): capping at **1200 MHz**
+  gave higher tokens/s than uncapped 1950 MHz while running cooler and at lower
+  power — inference is memory-bound, so the extra clock only added heat.
 
 ## Configuration
 

@@ -9,8 +9,8 @@ performance signal, then picks the most efficient cap and locks it in for the
 current workload.
 
 The performance signal is pluggable:
-- games            -> FPS (RTSS / PresentMon)
-- local LLMs       -> tokens/second (Ollama API, via make_ollama_provider)
+- games            -> FPS via RTSS shared memory (make_rtss_fps_provider)
+- local LLMs       -> tokens/second via Ollama (make_ollama_provider)
 
 This is the missing "active experimentation" piece: SweetSpotFinder only
 analysed whatever clocks happened to occur during use; here we deliberately
@@ -243,6 +243,95 @@ def make_ollama_provider(model: str,
 
 
 # --------------------------------------------------------------------------
+# FPS provider via RTSS (RivaTuner Statistics Server, ships with MSI Afterburner)
+# --------------------------------------------------------------------------
+class _RTSSReader:
+    """Reads real per-application FPS from RTSS shared memory.
+
+    RTSS (bundled with MSI Afterburner) publishes a shared block named
+    'RTSSSharedMemoryV2' with one entry per hooked app, each holding a frame
+    counter and a time window: FPS = dwFrames * 1000 / (dwTime1 - dwTime0).
+    Requires RTSS to be running and the game to be hooked by it. We attach to
+    the EXISTING mapping via OpenFileMapping (not mmap(-1), which would create
+    a fresh empty block), and read the documented entry layout.
+    """
+    _FILE_MAP_READ = 0x0004
+    _SIGNATURE = 0x52545353  # 'RTSS'
+    # byte offsets inside RTSS_SHARED_MEMORY_APP_ENTRY
+    _OFF_TIME0, _OFF_TIME1, _OFF_FRAMES = 268, 272, 276
+
+    def __init__(self):
+        self._addr = None
+        self._entry_size = self._arr_off = self._arr_size = 0
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k = ctypes.windll.kernel32
+            k.OpenFileMappingW.restype = wintypes.HANDLE
+            k.OpenFileMappingW.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+            k.MapViewOfFile.restype = ctypes.c_void_p
+            k.MapViewOfFile.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                        wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+            h = k.OpenFileMappingW(self._FILE_MAP_READ, False, "RTSSSharedMemoryV2")
+            if not h:
+                logging.info("RTSS non detecte (lancez MSI Afterburner/RTSS) - pas de FPS reelle")
+                return
+            addr = k.MapViewOfFile(h, self._FILE_MAP_READ, 0, 0, 0)
+            if not addr:
+                return
+            hdr = (ctypes.c_uint32 * 8).from_address(addr)
+            if hdr[0] != self._SIGNATURE:
+                logging.info(f"RTSS signature inattendue: {hex(hdr[0])}")
+                return
+            self._ctypes = ctypes
+            self._addr = addr
+            self._entry_size, self._arr_off, self._arr_size = hdr[2], hdr[3], hdr[4]
+            logging.info(f"RTSS detecte: {self._arr_size} slots d'app")
+        except Exception as e:
+            logging.info(f"RTSS indisponible: {e}")
+
+    @property
+    def available(self) -> bool:
+        return self._addr is not None
+
+    def read_max_fps(self, name_filter: Optional[str] = None) -> float:
+        """Highest FPS among currently hooked apps (0.0 if none/unavailable)."""
+        if not self._addr:
+            return 0.0
+        c = self._ctypes
+        best = 0.0
+        for i in range(self._arr_size):
+            base = self._addr + self._arr_off + i * self._entry_size
+            if c.c_uint32.from_address(base).value == 0:  # dwProcessID
+                continue
+            if name_filter:
+                nm = c.string_at(base + 4, 260).split(b"\x00")[0].decode("ascii", "replace")
+                if name_filter.lower() not in nm.lower():
+                    continue
+            t0 = c.c_uint32.from_address(base + self._OFF_TIME0).value
+            t1 = c.c_uint32.from_address(base + self._OFF_TIME1).value
+            frames = c.c_uint32.from_address(base + self._OFF_FRAMES).value
+            if t1 > t0:
+                fps = frames * 1000.0 / (t1 - t0)
+                best = max(best, fps)
+        return best
+
+
+def make_rtss_fps_provider(name_filter: Optional[str] = None) -> Callable[[], float]:
+    """Return a perf_provider that reads real FPS from RTSS shared memory.
+
+    name_filter: optional substring of the game's exe name (e.g. 'cyberpunk');
+    if None, uses the fastest-rendering hooked app.
+    """
+    reader = _RTSSReader()
+
+    def provider() -> float:
+        return reader.read_max_fps(name_filter)
+
+    return provider
+
+
+# --------------------------------------------------------------------------
 # Demos / CLI
 # --------------------------------------------------------------------------
 def _print(res: SweepResult):
@@ -282,9 +371,32 @@ def _demo_llm(model: str):
     tuner.controller.reset_gpu_clocks()
 
 
+def _demo_game(name_filter: Optional[str] = None):
+    """Real gaming auto-tuning: sweep clock caps while reading FPS from RTSS.
+
+    Launch your game first, with MSI Afterburner / RTSS running and its FPS
+    overlay active, then start this. Pass a name filter (e.g. 'cyberpunk') to
+    lock onto a specific process instead of the fastest-rendering app.
+    """
+    tuner = GPUAutoResearch()
+    provider = make_rtss_fps_provider(name_filter)
+    res = tuner.run_sweep(
+        workload=f"game:{name_filter or 'active'}",
+        perf_provider=provider,
+        perf_unit="fps",
+        levels=GPUAutoResearch.GAMING_LEVELS,
+        window_s=20, settle_s=4, sample_interval=1.0,
+    )
+    _print(res)
+    tuner.controller.reset_gpu_clocks()
+
+
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) >= 2 and sys.argv[1] == "llm":
+    mode = sys.argv[1] if len(sys.argv) >= 2 else ""
+    if mode == "llm":
         _demo_llm(sys.argv[2] if len(sys.argv) > 2 else "dolphin-trinity-nano:latest")
+    elif mode == "game":
+        _demo_game(sys.argv[2] if len(sys.argv) > 2 else None)
     else:
         _demo_idle()
