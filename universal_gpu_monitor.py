@@ -22,9 +22,16 @@ from typing import Dict, Any, Optional, List
 import os
 import sys
 
+if sys.platform == "win32":
+    import io
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 from universal_game_detector import GAME_DETECTOR, DetectedGame
 from games_database import GAMES_DB
 from gpu_ml_logger import ML_LOGGER
+from workload_thermal_controller import WorkloadThermalController
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='🎮 %(asctime)s - %(levelname)s - %(message)s')
@@ -52,6 +59,7 @@ class UniversalGPUMonitor:
         # ML Logger pour apprentissage intelligent
         self.ml_logger = ML_LOGGER
         self.ml_session_active = False
+        self.thermal_controller = WorkloadThermalController()
 
         # Jeu actuellement surveillé
         self.current_game: Optional[DetectedGame] = None
@@ -138,6 +146,12 @@ class UniversalGPUMonitor:
                 # 4. Collecte des métriques GPU
                 monitoring_data = self._collect_monitoring_data(primary_game, detected_games)
 
+                if self.current_game_profile:
+                    self.thermal_controller.adjust_for_temperature(
+                        monitoring_data.get("gpu_temperature", 0),
+                        self.current_game_profile,
+                    )
+
                 # 5. Stockage des données
                 self.monitoring_data.append(monitoring_data)
                 if len(self.monitoring_data) > self.max_history:
@@ -198,14 +212,18 @@ class UniversalGPUMonitor:
                 self.ml_logger.start_session(game.custom_name)
                 self.ml_session_active = True
 
-                logging.info(f"🎮 Jeu actif: {game.custom_name} ({game.process_name})")
+                category = self.current_game_profile.get('category', 'gaming')
+                mode = self.current_game_profile.get('optimization_mode', 'active')
+                self.thermal_controller.apply_for_workload(self.current_game_profile)
+                logging.info(f"🎮 Workload actif: {game.custom_name} ({game.process_name}) [{category}/{mode}]")
                 if game.is_known:
                     logging.info(f"✅ Profil connu appliqué: {self.current_game_profile['thermal_profile']}")
                 else:
-                    logging.info(f"⚠️ Profil générique appliqué")
+                    logging.info(f"📋 Profil {mode} appliqué (cible {self.current_game_profile['target_temp']}°C)")
             else:
                 self.current_game = None
                 self.current_game_profile = None
+                self.thermal_controller.apply_for_workload(None)
                 logging.info("🎮 Aucun jeu actif")
 
     def _update_alert_thresholds(self, profile: Dict[str, Any]):
@@ -383,6 +401,17 @@ class UniversalGPUMonitor:
             print("⚠️  Aucun jeu détecté")
             print(f"   {data.get('all_games_count', 0)} processus de jeu potentiels surveillés")
 
+        thermal = self.thermal_controller.get_display_status()
+        print("\n" + "-"*80)
+        print("🌡️  CONTRÔLE THERMIQUE ACTIF")
+        print("-"*80)
+        print(f"Mode workload:     {thermal['workload_mode']}")
+        print(f"Action en cours:   {thermal['active_action']}")
+        print(f"Afterburner:       {thermal['afterburner_profile']}")
+        print(f"Cap pilote:        {thermal['driver_cap']}")
+        print(f"Echelle IA:        {thermal['ai_ladder']}")
+        print(f"Clock verrouille:  {thermal['clock_locked']}")
+
         # Métriques GPU
         print("\n" + "-"*80)
         print("🖥️  MÉTRIQUES GPU")
@@ -525,6 +554,7 @@ class UniversalGPUMonitor:
             self.ml_logger.end_session()
             self.ml_session_active = False
 
+        self.thermal_controller.release()
         logging.info("🛑 Monitoring arrêté")
 
         # Statistiques finales

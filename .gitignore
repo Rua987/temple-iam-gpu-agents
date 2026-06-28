@@ -39,6 +39,10 @@ Thumbs.db
 gpu_test_*.txt
 benchmark_*.json
 
+# Captured run/debug outputs (noise — keep out of the repo)
+debug_log.txt
+*_output.txt
+
 # ML data (user-specific learning data)
 gpu_ml_data/
 learned_games.json

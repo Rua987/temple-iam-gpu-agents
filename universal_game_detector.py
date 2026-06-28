@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO, format='🔍 %(asctime)s - %(levelname)s
 
 @dataclass
 class DetectedGame:
-    """Jeu détecté avec informations en temps réel"""
+    """Workload GPU détecté avec informations en temps réel (jeu, IA locale, etc.)"""
     profile: Optional[GameProfile]
     process_name: str
     pid: int
@@ -37,6 +37,24 @@ class DetectedGame:
     custom_name: str  # Nom personnalisé pour jeux inconnus
     cpu_usage: float
     memory_mb: float
+    category: str = "gaming"  # gaming, local_ai, browser_webview, unknown_gpu_app
+
+
+# Workloads GPU non-jeux connus : on les détecte et on adapte l'optimisation
+# au lieu de les traiter comme des jeux.
+KNOWN_WORKLOAD_CATEGORIES = {
+    # IA locale - charge GPU soutenue, priorité au refroidissement stable
+    'ollama.exe': 'local_ai',
+    'lm studio.exe': 'local_ai',
+    'lmstudio.exe': 'local_ai',
+    'koboldcpp.exe': 'local_ai',
+    'llama-server.exe': 'local_ai',
+    'text-generation-webui.exe': 'local_ai',
+    'comfyui.exe': 'local_ai',
+    # WebView/navigateurs embarqués - GPU léger, observation seulement
+    'msedgewebview2.exe': 'browser_webview',
+    'webview2.exe': 'browser_webview',
+}
 
 class UniversalGameDetector:
     """Détecteur universel de jeux - OMNISCIENCE DIVINE ! 👁️"""
@@ -56,51 +74,68 @@ class UniversalGameDetector:
         # Liste de processus de jeu actuellement détectés
         self.detected_games: List[DetectedGame] = []
 
-        # Liste de processus système à ignorer
+        # Liste de processus systeme a ignorer (COMPLETE!)
         self.ignore_processes = {
-            # Windows système
-            'explorer.exe', 'svchost.exe', 'system', 'registry',
+            # Windows systeme core
+            'explorer.exe', 'svchost.exe', 'system', 'registry', 'idle',
             'dwm.exe', 'csrss.exe', 'winlogon.exe', 'services.exe',
             'lsass.exe', 'smss.exe', 'wininit.exe', 'taskhostw.exe',
             'runtimebroker.exe', 'searchindexer.exe', 'msiexec.exe',
             'conhost.exe', 'dllhost.exe', 'audiodg.exe', 'spoolsv.exe',
+            'fontdrvhost.exe', 'sihost.exe', 'ctfmon.exe', 'dashost.exe',
+            'shellexperiencehost.exe', 'startmenuexperiencehost.exe',
+            'searchhost.exe', 'textinputhost.exe', 'applicationframehost.exe',
 
-            # Windows mémoire et compression
+            # Windows Update et Services
+            'usoclient.exe', 'sihclient.exe', 'wuauclt.exe', 'trustedinstaller.exe',
+            'tiworker.exe', 'musnotification.exe', 'windowsupdateelevatedinstaller.exe',
+
+            # Windows memoire et compression
             'memcompression', 'vmmem', 'vmmemwsl', 'memory compression',
+
+            # Antivirus et securite (TOUTES les variantes!)
+            'msmpeng.exe', 'MsMpEng.exe', 'msmpeng', 'mssense.exe', 'nissrv.exe',
+            'securityhealthservice.exe', 'securityhealthsystray.exe',
+            'avastui.exe', 'avgui.exe', 'mbamservice.exe', 'mbam.exe',
+            'avgnt.exe', 'avguard.exe', 'avshadow.exe',
+            'windows defender', 'defender', 'antimalware service executable',
 
             # Navigateurs
             'chrome.exe', 'firefox.exe', 'edge.exe', 'brave.exe',
-            'msedge.exe', 'opera.exe', 'vivaldi.exe',
+            'msedge.exe', 'opera.exe', 'vivaldi.exe', 'iexplore.exe',
+            'chromium.exe', 'tor.exe',
 
             # Communication
             'discord.exe', 'spotify.exe', 'slack.exe', 'teams.exe',
             'zoom.exe', 'skype.exe', 'telegram.exe', 'whatsapp.exe',
+            'signal.exe', 'guilded.exe',
 
-            # Développement et éditeurs
+            # Developpement et editeurs
             'code.exe', 'notepad.exe', 'notepad++.exe', 'sublime_text.exe',
             'pycharm64.exe', 'idea64.exe', 'rider64.exe', 'webstorm64.exe',
             'python.exe', 'pythonw.exe', 'node.exe', 'java.exe', 'javaw.exe',
             'cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'wsl.exe',
+            'git.exe', 'ssh.exe', 'mintty.exe', 'windowsterminal.exe',
 
             # AI Assistants
-            'claude.exe', 'claude code.exe', 'cursor.exe',
+            'claude.exe', 'claude code.exe', 'cursor.exe', 'copilot.exe',
 
             # GPU/Hardware utilities
             'nvcontainer.exe', 'nvidia web helper.exe', 'nvidia share.exe',
-            'nvdisplay.container.exe', 'radeonrelivehost.exe', 'amdrsserv.exe',
+            'nvdisplay.container.exe', 'nvspcaps64.exe', 'nvbackend.exe',
+            'nvtelemetrycontainer.exe', 'nvcplui.exe',
+            'radeonrelivehost.exe', 'amdrsserv.exe', 'amddvr.exe',
 
             # Launchers helpers (not the games themselves)
             'steamwebhelper.exe', 'epicwebhelper.exe', 'origin.exe',
             'uplay.exe', 'uplaywebcore.exe', 'battlenet.exe', 'battle.net.exe',
+            'eadesktop.exe', 'eabackgroundservice.exe',
+            'gogalaxy.exe', 'gogalaxycommunication.exe',
 
-            # Utilitaires système
+            # Utilitaires systeme
             'taskmgr.exe', 'perfmon.exe', 'resmon.exe', 'mmc.exe',
-            'control.exe', 'regedit.exe', 'msconfig.exe',
-
-            # Antivirus et sécurité
-            'msmpeng.exe', 'msmpeng', 'mssense.exe', 'nissrv.exe', 'securityhealthservice.exe',
-            'avastui.exe', 'avgui.exe', 'mbamservice.exe',
-            'windows defender', 'defender'
+            'control.exe', 'regedit.exe', 'msconfig.exe', 'systemsettings.exe',
+            'settingssynchost.exe', 'phoneexperiencehost.exe'
         }
 
         # Patterns de jeux connus (suffixes d'exécutables)
@@ -135,6 +170,15 @@ class UniversalGameDetector:
             logging.info(f"💾 Jeux appris sauvegardés: {len(self.learned_games)}")
         except Exception as e:
             logging.error(f"❌ Erreur sauvegarde jeux appris: {str(e)}")
+
+    def _classify_workload(self, proc_name: str) -> str:
+        """
+        Classe un processus détecté par type de workload GPU.
+
+        Returns:
+            'gaming', 'local_ai', 'browser_webview' ou 'unknown_gpu_app'
+        """
+        return KNOWN_WORKLOAD_CATEGORIES.get(proc_name.lower(), 'unknown_gpu_app')
 
     def _is_likely_game_process(self, proc_name: str, proc_info: Dict[str, Any]) -> bool:
         """
@@ -203,15 +247,17 @@ class UniversalGameDetector:
                             is_known=True,
                             custom_name=game_profile.display_name,
                             cpu_usage=proc_info.get('cpu_percent', 0.0),
-                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024)
+                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024),
+                            category='gaming'
                         )
                         detected.append(detected_game)
                         logging.info(f"🎮 Jeu connu détecté: {game_profile.display_name}")
                         continue
 
-                    # 2. Vérifier dans les jeux appris
+                    # 2. Vérifier dans les workloads appris
                     if proc_name in self.learned_games:
                         learned = self.learned_games[proc_name]
+                        category = learned.get('category') or self._classify_workload(proc_name)
                         detected_game = DetectedGame(
                             profile=None,
                             process_name=proc_name,
@@ -221,16 +267,18 @@ class UniversalGameDetector:
                             is_known=False,
                             custom_name=learned.get('custom_name', proc_name),
                             cpu_usage=proc_info.get('cpu_percent', 0.0),
-                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024)
+                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024),
+                            category=category
                         )
                         detected.append(detected_game)
-                        logging.info(f"🧠 Jeu appris détecté: {learned.get('custom_name', proc_name)}")
+                        logging.info(f"🧠 Workload appris détecté: {learned.get('custom_name', proc_name)} [{category}]")
                         continue
 
-                    # 3. Auto-apprentissage: détecter nouveau jeu potentiel
+                    # 3. Auto-apprentissage: détecter nouveau workload GPU potentiel
                     if self.auto_learn and self._is_likely_game_process(proc_name, proc_info):
-                        # Nouveau jeu potentiel détecté
+                        # Nouveau workload potentiel détecté
                         custom_name = proc_name.replace('.exe', '').replace('-', ' ').title()
+                        category = self._classify_workload(proc_name)
 
                         detected_game = DetectedGame(
                             profile=None,
@@ -241,20 +289,22 @@ class UniversalGameDetector:
                             is_known=False,
                             custom_name=custom_name,
                             cpu_usage=proc_info.get('cpu_percent', 0.0),
-                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024)
+                            memory_mb=proc_info.get('memory_info', psutil.Process().memory_info()).rss / (1024 * 1024),
+                            category=category
                         )
                         detected.append(detected_game)
 
-                        # Ajouter aux jeux appris
+                        # Ajouter aux workloads appris
                         if proc_name not in self.learned_games:
                             self.learned_games[proc_name] = {
                                 'custom_name': custom_name,
+                                'category': category,
                                 'first_detected': datetime.now().isoformat(),
                                 'detection_count': 1,
                                 'exe_path': proc_info.get('exe', 'Unknown')
                             }
                             self._save_learned_games()
-                            logging.info(f"🆕 Nouveau jeu appris: {custom_name} ({proc_name})")
+                            logging.info(f"🆕 Nouveau workload appris: {custom_name} ({proc_name}) [{category}]")
                         else:
                             # Incrémenter compteur détection
                             self.learned_games[proc_name]['detection_count'] += 1
@@ -287,11 +337,11 @@ class UniversalGameDetector:
             # Trier par utilisation CPU (proxy pour activité)
             return max(known_games, key=lambda g: g.cpu_usage)
 
-        # Sinon, jeu inconnu avec le plus d'activité
-        if self.detected_games:
-            return max(self.detected_games, key=lambda g: g.cpu_usage)
-
-        return None
+        # Sinon, workload actif le plus chargé - les webviews passent en dernier
+        # (un webview ne doit jamais primer sur une IA locale ou un jeu inconnu)
+        non_webview = [g for g in self.detected_games if g.category != 'browser_webview']
+        candidates = non_webview if non_webview else self.detected_games
+        return max(candidates, key=lambda g: g.cpu_usage)
 
     def get_game_optimization_profile(self, game: DetectedGame) -> Dict[str, Any]:
         """
@@ -307,6 +357,8 @@ class UniversalGameDetector:
             # Jeu connu - profil complet
             return {
                 'name': game.profile.display_name,
+                'category': 'gaming',
+                'optimization_mode': 'active',
                 'thermal_profile': game.profile.thermal_profile,
                 'target_temp': game.profile.default_settings.get('target_temp', 75),
                 'target_fps': game.profile.default_settings.get('target_fps', 60),
@@ -317,24 +369,68 @@ class UniversalGameDetector:
                 'optimization_hints': game.profile.optimization_hints,
                 'is_known': True
             }
-        else:
-            # Jeu inconnu - profil par défaut conservateur
+
+        if game.category == 'local_ai':
+            # IA locale (Ollama, LM Studio...) - charge GPU soutenue sans notion de FPS.
+            # Priorité : refroidissement stable pour éviter le throttling pendant l'inférence.
             return {
                 'name': game.custom_name,
+                'category': 'local_ai',
+                'optimization_mode': 'stable_cooling',
                 'thermal_profile': 'medium',
-                'target_temp': 75,
-                'target_fps': 60,
+                'target_temp': 70,
+                'target_fps': 0,  # Pas de FPS pour l'inférence IA
                 'supports_dlss': False,
                 'supports_ray_tracing': False,
                 'vram_requirement_gb': 6.0,
-                'recommended_gpu_usage': 75.0,
+                'recommended_gpu_usage': 90.0,
                 'optimization_hints': [
-                    'Profil générique appliqué',
-                    'Surveillance thermique active',
-                    'Optimisations conservatrices'
+                    'Workload IA locale détecté',
+                    'Priorité au refroidissement stable (anti-throttling)',
+                    'Pas de cible FPS - débit de tokens privilégié'
                 ],
                 'is_known': False
             }
+
+        if game.category == 'browser_webview':
+            # WebView/navigateur embarqué - on observe sans intervenir.
+            return {
+                'name': game.custom_name,
+                'category': 'browser_webview',
+                'optimization_mode': 'observe_only',
+                'thermal_profile': 'low',
+                'target_temp': 75,
+                'target_fps': 0,
+                'supports_dlss': False,
+                'supports_ray_tracing': False,
+                'vram_requirement_gb': 1.0,
+                'recommended_gpu_usage': 30.0,
+                'optimization_hints': [
+                    'WebView détecté - observation seulement',
+                    'Aucune optimisation GPU appliquée'
+                ],
+                'is_known': False
+            }
+
+        # Workload GPU inconnu - profil par défaut conservateur
+        return {
+            'name': game.custom_name,
+            'category': game.category,
+            'optimization_mode': 'active',
+            'thermal_profile': 'medium',
+            'target_temp': 75,
+            'target_fps': 60,
+            'supports_dlss': False,
+            'supports_ray_tracing': False,
+            'vram_requirement_gb': 6.0,
+            'recommended_gpu_usage': 75.0,
+            'optimization_hints': [
+                'Profil générique appliqué',
+                'Surveillance thermique active',
+                'Optimisations conservatrices'
+            ],
+            'is_known': False
+        }
 
     def get_detection_summary(self) -> Dict[str, Any]:
         """Résumé de la détection actuelle"""
@@ -354,6 +450,7 @@ class UniversalGameDetector:
                     'name': g.custom_name,
                     'process': g.process_name,
                     'is_known': g.is_known,
+                    'category': g.category,
                     'cpu_usage': g.cpu_usage,
                     'memory_mb': g.memory_mb
                 }
