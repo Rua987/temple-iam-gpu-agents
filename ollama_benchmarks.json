@@ -1,6 +1,6 @@
 [
   {
-    "model": "huihui_ai/qwen3.5-abliterated:9b",
+    "model": "deepseek-r1:8b",
     "optimal_mhz": 1200,
     "status": "ok"
   }
