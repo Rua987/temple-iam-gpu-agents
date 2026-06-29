@@ -16,9 +16,14 @@ class WorkloadThermalController:
         self,
         afterburner: Optional[AfterburnerProfileController] = None,
         gpu_controller: Optional[GPURealController] = None,
+        dry_run: bool = False,
+        gpu_index: int = 0,
     ):
-        self.afterburner = afterburner or AfterburnerProfileController()
-        self.gpu_controller = gpu_controller or GPURealController()
+        # dry_run: propage la simulation aux deux actuateurs (clocks + Afterburner).
+        # gpu_index: carte ciblee (multi-GPU), passe au controleur clocks.
+        self.dry_run = dry_run
+        self.afterburner = afterburner or AfterburnerProfileController(dry_run=dry_run)
+        self.gpu_controller = gpu_controller or GPURealController(dry_run=dry_run, gpu_index=gpu_index)
         self.current_mode: Optional[str] = None
         self.current_ai_profile: Optional[str] = None
         # Override thermique pilote par le scorer (emergency_throttle/thermal_focus).

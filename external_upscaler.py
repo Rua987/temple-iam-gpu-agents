@@ -31,9 +31,10 @@ class ExternalUpscaler:
         os.path.expandvars(r"%LOCALAPPDATA%\Programs\Lossless Scaling\LosslessScaling.exe"),
     ]
 
-    def __init__(self, exe_path: Optional[str] = None):
+    def __init__(self, exe_path: Optional[str] = None, dry_run: bool = False):
         self.exe_path = exe_path or self._find_exe()
         self.process: Optional[subprocess.Popen] = None
+        self.dry_run = dry_run  # simulation: ne lance pas reellement l'upscaler
 
     def _find_exe(self) -> Optional[str]:
         for p in self.CANDIDATES:
@@ -62,6 +63,9 @@ class ExternalUpscaler:
         """Lance l'upscaler s'il est dispo et pas deja lance par nous."""
         if not self.available or self.running:
             return self.running
+        if self.dry_run:
+            logging.info("[DRY-RUN] lancerait l'upscaler externe: %s", self.name)
+            return False
         try:
             self.process = subprocess.Popen([self.exe_path])
             logging.info("Upscaler externe lance: %s", self.name)

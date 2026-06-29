@@ -136,7 +136,14 @@ class GPURealController:
         )
     }
 
-    def __init__(self):
+    def __init__(self, dry_run: bool = False, gpu_index: int = 0):
+        # dry_run: simule les actions GPU (lock/reset clocks) sans rien actuer.
+        # On garde la comptabilite (current_profile, is_clock_locked) pour que le
+        # dashboard montre ce qui SERAIT applique. Sert aux tests communautaires.
+        self.dry_run = dry_run
+        # gpu_index: carte ciblee (multi-GPU). 0 = comportement mono-GPU teste.
+        # Injecte via `-i N` dans toutes les commandes nvidia-smi.
+        self.gpu_index = int(gpu_index)
         self.nvidia_smi_path = self._find_nvidia_smi()
         self.power_info = self._query_power_info()
         self.capabilities = self._detect_capabilities()
@@ -154,10 +161,14 @@ class GPURealController:
         }
 
         logging.info("GPU Real Controller initialise")
-        logging.info(f"nvidia-smi: {self.nvidia_smi_path}")
+        logging.info(f"nvidia-smi: {self.nvidia_smi_path} (GPU index {self.gpu_index})")
         logging.info(f"Capacites: {self.capabilities.value}")
         if self.capabilities == GPUControlCapability.FULL and self.power_info.get('default'):
             logging.info(f"Power limit controlable (defaut {self.power_info['default']}W)")
+
+    def _smi(self, *args) -> list:
+        """Commande nvidia-smi ciblant le GPU choisi (-i index). Mono-GPU: -i 0."""
+        return [self.nvidia_smi_path, '-i', str(self.gpu_index), *args]
 
     def _find_nvidia_smi(self) -> str:
         """Trouve le chemin de nvidia-smi"""
@@ -187,7 +198,7 @@ class GPURealController:
         try:
             # Test lock GPU clocks
             result = subprocess.run(
-                [self.nvidia_smi_path, '-lgc', '300,2100'],
+                self._smi('-lgc', '300,2100'),
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -198,7 +209,7 @@ class GPURealController:
 
             # Reset immediatement
             subprocess.run(
-                [self.nvidia_smi_path, '-rgc'],
+                self._smi('-rgc'),
                 capture_output=True,
                 timeout=5
             )
@@ -209,7 +220,7 @@ class GPURealController:
             default_pl = self.power_info.get('default')
             if default_pl:
                 result = subprocess.run(
-                    [self.nvidia_smi_path, '-pl', str(default_pl)],
+                    self._smi('-pl', str(default_pl)),
                     capture_output=True,
                     text=True,
                     timeout=5
@@ -228,9 +239,9 @@ class GPURealController:
         """Recupere les metriques GPU actuelles"""
         try:
             result = subprocess.run(
-                [self.nvidia_smi_path,
-                 '--query-gpu=temperature.gpu,utilization.gpu,clocks.current.graphics,clocks.max.graphics,memory.used,memory.total,power.draw,fan.speed',
-                 '--format=csv,noheader,nounits'],
+                self._smi(
+                    '--query-gpu=temperature.gpu,utilization.gpu,clocks.current.graphics,clocks.max.graphics,memory.used,memory.total,power.draw,fan.speed',
+                    '--format=csv,noheader,nounits'),
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -289,8 +300,15 @@ class GPURealController:
             logging.warning("Lock clocks non supporte sur ce GPU")
             return False
 
+        if self.dry_run:
+            # Simulation: on note l'intention sans toucher le GPU.
+            self.is_clock_locked = True
+            self.current_clock_limit = (min_clock, max_clock)
+            logging.info(f"[DRY-RUN] verrouillerait les clocks: {min_clock}-{max_clock} MHz")
+            return True
+
         try:
-            cmd = [self.nvidia_smi_path, '-lgc', f'{min_clock},{max_clock}']
+            cmd = self._smi('-lgc', f'{min_clock},{max_clock}')
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -324,9 +342,16 @@ class GPURealController:
             logging.warning("Reset clocks non supporte sur ce GPU")
             return False
 
+        if self.dry_run:
+            self.is_clock_locked = False
+            self.current_clock_limit = None
+            self.current_profile = None
+            logging.info("[DRY-RUN] reinitialiserait les clocks aux valeurs par defaut")
+            return True
+
         try:
             result = subprocess.run(
-                [self.nvidia_smi_path, '-rgc'],
+                self._smi('-rgc'),
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -360,7 +385,7 @@ class GPURealController:
         try:
             import re
             result = subprocess.run(
-                [self.nvidia_smi_path, '-q', '-d', 'POWER'],
+                self._smi('-q', '-d', 'POWER'),
                 capture_output=True, text=True, timeout=5
             )
             for line in result.stdout.splitlines():
@@ -397,7 +422,7 @@ class GPURealController:
         watts = max(lo, min(hi, int(watts)))
         try:
             result = subprocess.run(
-                [self.nvidia_smi_path, '-pl', str(watts)],
+                self._smi('-pl', str(watts)),
                 capture_output=True, text=True, timeout=5
             )
             out = (result.stdout + result.stderr).lower()

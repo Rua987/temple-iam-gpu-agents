@@ -53,15 +53,21 @@ logging.basicConfig(
 class UniversalGPUMonitor:
     """Moniteur GPU Universel - SURVEILLANCE DIVINE MULTI-JEUX ! 🎮"""
 
-    def __init__(self, monitor_interval: float = 1.0, max_history: int = 1000):
+    def __init__(self, monitor_interval: float = 1.0, max_history: int = 1000, dry_run: bool = False, gpu_index: int = 0):
         """
         Initialisation du moniteur GPU universel
 
         Args:
             monitor_interval: Intervalle de monitoring en secondes
             max_history: Nombre maximum de points de données à conserver
+            dry_run: simulation - detecte, score, affiche, mais N'APPLIQUE AUCUNE
+                     action GPU reelle (caps clocks, Afterburner, upscaler). Pour
+                     que les testeurs valident la detection sans risque.
+            gpu_index: carte ciblee (multi-GPU). 0 = mono-GPU (comportement teste).
         """
         self.is_running = False
+        self.dry_run = dry_run
+        self.gpu_index = gpu_index
         self.monitoring_data = []
         self.alert_history = []
         self.monitor_interval = monitor_interval
@@ -73,7 +79,7 @@ class UniversalGPUMonitor:
         # ML Logger pour apprentissage intelligent
         self.ml_logger = ML_LOGGER
         self.ml_session_active = False
-        self.thermal_controller = WorkloadThermalController()
+        self.thermal_controller = WorkloadThermalController(dry_run=dry_run, gpu_index=gpu_index)
 
         # Jeu actuellement surveillé
         self.current_game: Optional[DetectedGame] = None
@@ -90,7 +96,7 @@ class UniversalGPUMonitor:
         # Upscaler externe (Lossless Scaling / Magpie) orchestre par l'agent,
         # GAMING uniquement. Debounce pour ne pas le lancer/couper sans arret
         # quand la detection de process principal clignote (Edge/Ollama).
-        self.upscaler = ExternalUpscaler()
+        self.upscaler = ExternalUpscaler(dry_run=dry_run)
         self._no_game_ticks = 0
         self._STOP_AFTER_TICKS = 10  # arrete l'upscaler apres ~10s sans jeu
 
@@ -450,6 +456,8 @@ class UniversalGPUMonitor:
         uptime = int(data.get('uptime_seconds', 0))
         clock = f"{uptime//3600:02d}:{(uptime%3600)//60:02d}:{uptime%60:02d}"
         print(f"🎮 GPU MONITOR · {clock} · Ctrl+C pour arreter (logs -> universal_gpu_monitor.log)")
+        if self.dry_run:
+            print("🧪 MODE DRY-RUN — simulation, AUCUNE action GPU reelle (caps/Afterburner/upscaler)")
 
         # --- Mode: jeu vs IA (le dashboard s'adapte au workload) ---
         prof = self.current_game_profile or {}
@@ -723,12 +731,34 @@ class UniversalGPUMonitor:
 
 def main():
     """Point d'entrée principal"""
-    print("🎮 UNIVERSAL GPU MONITOR - DÉMARRAGE")
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Universal GPU Monitor - surveillance + optimisation thermique adaptative."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Simulation: detecte, score et affiche, mais N'APPLIQUE aucune action "
+             "GPU reelle (caps clocks, Afterburner, upscaler). Sans risque pour tester.",
+    )
+    parser.add_argument(
+        "--gpu-index", type=int, default=0, metavar="N",
+        help="Index du GPU a surveiller/controler (multi-GPU). Defaut 0 (mono-GPU).",
+    )
+    args = parser.parse_args()
 
-    # Création et démarrage du moniteur
+    flags = []
+    if args.dry_run:
+        flags.append("DRY-RUN")
+    if args.gpu_index:
+        flags.append(f"GPU#{args.gpu_index}")
+    suffix = f" [{', '.join(flags)}]" if flags else ""
+    print("🎮 UNIVERSAL GPU MONITOR - DÉMARRAGE" + suffix)
+
     monitor = UniversalGPUMonitor(
         monitor_interval=1.0,
-        max_history=1000
+        max_history=1000,
+        dry_run=args.dry_run,
+        gpu_index=args.gpu_index,
     )
 
     monitor.start_monitoring()

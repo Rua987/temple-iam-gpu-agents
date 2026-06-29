@@ -42,6 +42,7 @@ benchmark_*.json
 # Captured run/debug outputs (noise — keep out of the repo)
 debug_log.txt
 *_output.txt
+diagnostic_report.txt
 
 # ML data (user-specific learning data)
 gpu_ml_data/
