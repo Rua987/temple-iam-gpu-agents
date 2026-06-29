@@ -366,6 +366,7 @@ class UniversalGPUMonitor:
                 'gpu_memory_total_mb': gpu_metrics.get('memory_total_mb', 0),
                 'gpu_memory_percent': gpu_metrics.get('memory_percent', 0),
                 'gpu_power_usage': gpu_metrics.get('power_usage', 0),
+                'gpu_clock_current': gpu_metrics.get('clock_current', 0),
 
                 # Système
                 'cpu_usage': cpu_usage,
@@ -450,24 +451,35 @@ class UniversalGPUMonitor:
         clock = f"{uptime//3600:02d}:{(uptime%3600)//60:02d}:{uptime%60:02d}"
         print(f"🎮 GPU MONITOR · {clock} · Ctrl+C pour arreter (logs -> universal_gpu_monitor.log)")
 
-        # --- Jeu / workload (1 ligne) ---
+        # --- Mode: jeu vs IA (le dashboard s'adapte au workload) ---
+        prof = self.current_game_profile or {}
+        is_ai = bool(prof) and prof.get('category', '') == 'local_ai'
+
+        # --- Workload (1 ligne) ---
         if data.get('game_detected'):
             gi = data.get('game_info', {})
-            prof = gi.get('optimization_profile') or {}
-            tag = f"[{prof.get('thermal_profile','?').upper()}, cible {prof.get('target_temp','?')}°C / {prof.get('target_fps','?')} fps]"
-            print(f"Jeu: {gi.get('game_name','?')} {tag}")
+            name = gi.get('game_name', '?')
+            if is_ai:
+                print(f"🧠 Workload IA: {name} [cible {prof.get('target_temp','?')}°C] — gestion thermique pure")
+            else:
+                tag = f"[{prof.get('thermal_profile','?').upper()}, cible {prof.get('target_temp','?')}°C / {prof.get('target_fps','?')} fps]"
+                print(f"🎮 Jeu: {name} {tag}")
         else:
-            print(f"Jeu: aucun ({data.get('all_games_count', 0)} process surveilles)")
+            print(f"Workload: aucun ({data.get('all_games_count', 0)} process surveilles)")
 
         # --- GPU (3 lignes, barres courtes) ---
         gpu_usage = data.get('gpu_usage', 0)
         gpu_temp = data.get('gpu_temperature', 0)
         gpu_mem = data.get('gpu_memory_percent', 0)
-        fps = data.get('fps_estimate', 0)
-        fps_tag = f"FPS {fps:.1f} (RTSS reel)" if self.fps_is_real else f"FPS~{fps:.0f} (estime)"
+        # Derniere colonne: FPS pour le jeu, Power/Clock pour l'IA (le LLM n'a pas de FPS).
+        if is_ai:
+            extra = f"Power {data.get('gpu_power_usage',0):.0f}W · Clock {data.get('gpu_clock_current',0):.0f} MHz"
+        else:
+            fps = data.get('fps_estimate', 0)
+            extra = f"FPS {fps:.1f} (RTSS reel)" if self.fps_is_real else f"FPS~{fps:.0f} (estime)"
         print(f"Temp  {self._create_bar(gpu_temp, 100, 20)} {gpu_temp:5.1f}°C")
         print(f"Util  {self._create_bar(gpu_usage, 100, 20)} {gpu_usage:5.1f}%")
-        print(f"VRAM  {self._create_bar(gpu_mem, 100, 20)} {gpu_mem:5.1f}% ({data.get('gpu_memory_used_mb',0):.0f}/{data.get('gpu_memory_total_mb',0):.0f} MB) · {fps_tag}")
+        print(f"VRAM  {self._create_bar(gpu_mem, 100, 20)} {gpu_mem:5.1f}% ({data.get('gpu_memory_used_mb',0):.0f}/{data.get('gpu_memory_total_mb',0):.0f} MB) · {extra}")
 
         # --- Action thermique (1 ligne, le coeur du rebranch) ---
         thermal = self.thermal_controller.get_display_status()
@@ -478,15 +490,26 @@ class UniversalGPUMonitor:
             s = self.last_score
             b = s.breakdown
             print(f"🎯 Score {self._create_bar(s.overall_score, 100, 20)} {s.overall_score:5.1f}/100 [{s.state.value.upper()}]")
-            rec = f" · 💡 {s.recommendations[0]}" if s.recommendations else ""
-            print(f"   T{b.thermal_score:.0f} F{b.fps_score:.0f} E{b.efficiency_score:.0f} S{b.stability_score:.0f} · {s.recommended_strategy.value} ({s.trend}){rec}")
+            if is_ai:
+                # Pas de FPS pour un LLM: on masque la dimension FPS, et on n'affiche
+                # la reco que si elle est thermique (pas un message FPS hors-sujet).
+                rec = ""
+                if s.recommendations and 'fps' not in s.recommendations[0].lower():
+                    rec = f" · 💡 {s.recommendations[0]}"
+                print(f"   T{b.thermal_score:.0f} E{b.efficiency_score:.0f} S{b.stability_score:.0f} · {s.recommended_strategy.value} ({s.trend}){rec}")
+            else:
+                rec = f" · 💡 {s.recommendations[0]}" if s.recommendations else ""
+                print(f"   T{b.thermal_score:.0f} F{b.fps_score:.0f} E{b.efficiency_score:.0f} S{b.stability_score:.0f} · {s.recommended_strategy.value} ({s.trend}){rec}")
 
         # --- Conseiller upscaling (gaming only, si zone injouable) ---
         if self.last_advice:
             print(f"🎮 {self.last_advice}")
 
-        # --- Upscaler externe (statut) ---
-        print(f"🔧 Upscaler externe: {self.upscaler.status_line()}")
+        # --- Upscaler externe (statut, gaming seulement) ---
+        if is_ai:
+            print("🧠 Upscaler: desactive (workload IA - jamais d'upscaling sur l'entrainement)")
+        else:
+            print(f"🔧 Upscaler externe: {self.upscaler.status_line()}")
 
         # --- Systeme (1 ligne) ---
         print(f"💻 CPU {data.get('cpu_usage',0):.0f}% · RAM {data.get('memory_usage',0):.0f}% ({data.get('memory_available_gb',0):.1f} GB libre)")
