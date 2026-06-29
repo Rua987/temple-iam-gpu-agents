@@ -1,0 +1,76 @@
+{
+  "sweet_spots": {
+    "Elden Ring": {
+      "optimal_clock_mhz": 1700,
+      "optimal_temp_target": 85,
+      "expected_fps": 41.361,
+      "expected_temp": 82.0,
+      "efficiency_score": 0.9847857142857143,
+      "confidence": 0.098,
+      "recommendation": "🔥 GPU chaud - Équilibre atteint, évite d'augmenter les clocks.",
+      "analysis_details": {
+        "all_levels": {
+          "1500": {
+            "avg_fps": 12.290684210526317,
+            "avg_temp": 61.82051282051282,
+            "avg_power": 33.45153846153846,
+            "avg_usage": 31.846153846153847,
+            "efficiency": 0.5632628486610182,
+            "perf_per_watt": 0.3674176069557388,
+            "samples": 39
+          },
+          "1700": {
+            "avg_fps": 41.361,
+            "avg_temp": 82.0,
+            "avg_power": 108.179,
+            "avg_usage": 60.1,
+            "efficiency": 0.9847857142857143,
+            "perf_per_watt": 0.3823385315079636,
+            "samples": 10
+          }
+        },
+        "max_fps_observed": 41.361,
+        "fps_threshold_used": 39.29295,
+        "candidates_count": 1,
+        "analysis_date": "2025-12-17T06:14:53.007689"
+      }
+    },
+    "Cyberpunk 2077": {
+      "optimal_clock_mhz": 1850,
+      "optimal_temp_target": 83.6,
+      "expected_fps": 30.038400000000003,
+      "expected_temp": 78.6,
+      "efficiency_score": 0.77819689119171,
+      "confidence": 0.04,
+      "recommendation": "✅ Sweet Spot trouvé ! Équilibre optimal performance/température.",
+      "analysis_details": {
+        "all_levels": {
+          "1500": {
+            "avg_fps": 12.777,
+            "avg_temp": 70.4,
+            "avg_power": 40.748000000000005,
+            "avg_usage": 36.6,
+            "efficiency": 0.4202960526315788,
+            "perf_per_watt": 0.3135614017865907,
+            "samples": 10
+          },
+          "1850": {
+            "avg_fps": 30.038400000000003,
+            "avg_temp": 78.6,
+            "avg_power": 105.835,
+            "avg_usage": 40.7,
+            "efficiency": 0.77819689119171,
+            "perf_per_watt": 0.283822931922332,
+            "samples": 10
+          }
+        },
+        "max_fps_observed": 30.038400000000003,
+        "fps_threshold_used": 28.53648,
+        "candidates_count": 1,
+        "analysis_date": "2025-12-17T21:39:06.483707"
+      }
+    }
+  },
+  "version": "1.0",
+  "last_save": "2025-12-17T21:39:06.483707"
+}

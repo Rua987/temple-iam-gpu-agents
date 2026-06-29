@@ -1,0 +1,7 @@
+[
+  {
+    "model": "deepseek-r1:8b",
+    "optimal_mhz": 1200,
+    "status": "ok"
+  }
+]
