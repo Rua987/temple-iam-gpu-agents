@@ -49,6 +49,7 @@ gpu_ml_data/
 learned_games.json
 autoresearch_results.json
 sweet_spot_data.json
+thermal_ml_data.json
 
 # Large unrelated trees and junk (not part of the GPU tool)
 agents/

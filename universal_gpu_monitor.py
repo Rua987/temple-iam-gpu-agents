@@ -39,6 +39,7 @@ from performance_scorer import PERFORMANCE_SCORER, PerformanceState
 from rtss_reader import RTSSReader
 from external_upscaler import ExternalUpscaler
 from sweet_spot_finder import SweetSpotFinder
+from thermal_ml_predictor import ThermalMLPredictor
 
 # Configuration du logging: TOUT part dans un fichier, PAS dans la console.
 # Sinon les lignes de log (detection ML, alertes...) s'impriment par-dessus le
@@ -105,6 +106,10 @@ class UniversalGPUMonitor:
         # reste le plancher de securite.
         self.sweet_spot = SweetSpotFinder()
         self._analyze_counter = 0
+        # Predicteur thermique: anticipe les pics (regression sur la pente) pour
+        # freiner AVANT d'atteindre le seuil. GAMING uniquement.
+        self.thermal_predictor = ThermalMLPredictor()
+        self.last_prediction = None
 
         # Seuils d'alerte dynamiques (mis à jour selon le jeu)
         self.alert_thresholds = {
@@ -300,8 +305,10 @@ class UniversalGPUMonitor:
 
                 category = self.current_game_profile.get('category', 'gaming')
                 mode = self.current_game_profile.get('optimization_mode', 'active')
-                # Sweet spot = controle fin GAMING uniquement (jamais local_ai).
-                self.sweet_spot.set_current_game(game.custom_name if category == 'gaming' else None)
+                # Sweet spot + predicteur = GAMING uniquement (jamais local_ai).
+                gaming_name = game.custom_name if category == 'gaming' else None
+                self.sweet_spot.set_current_game(gaming_name)
+                self.thermal_predictor.set_current_game(gaming_name)
                 self.thermal_controller.apply_for_workload(self.current_game_profile)
                 logging.info(f"🎮 Workload actif: {game.custom_name} ({game.process_name}) [{category}/{mode}]")
                 if game.is_known:
@@ -315,6 +322,7 @@ class UniversalGPUMonitor:
                 self.current_game = None
                 self.current_game_profile = None
                 self.sweet_spot.set_current_game(None)
+                self.thermal_predictor.set_current_game(None)
                 self.thermal_controller.apply_for_workload(None)
                 logging.info("🎮 Aucun jeu actif")
 
@@ -498,6 +506,11 @@ class UniversalGPUMonitor:
         thermal = self.thermal_controller.get_display_status()
         print(f"🌡️  {thermal['active_action']} · cap pilote: {thermal['driver_cap']}")
 
+        # --- Anticipation (predicteur de pics, gaming) — affiche si ca signale ---
+        p = self.last_prediction
+        if p is not None and getattr(p, 'recommended_action', 'none') != 'none':
+            print(f"🔮 Anticipation: ~{p.predicted_temp_10s:.0f}°C dans 10s ({p.trend}) → {p.recommended_action}")
+
         # --- Score (2 lignes) ---
         if self.last_score is not None:
             s = self.last_score
@@ -664,18 +677,42 @@ class UniversalGPUMonitor:
         temp = data.get('gpu_temperature', 0)
         target_temp = profile.get('target_temp', 75)
         strategy = score.recommended_strategy.value if score is not None else 'balanced'
+        is_gaming = profile.get('category', '') == 'gaming'
+        clock = int(data.get('gpu_clock_current', 0) or 0)
+        fps = data.get('fps_estimate', 0)
 
-        # --- Etage 1: securite (gere aussi le relachement quand la temp retombe) ---
-        self.thermal_controller.apply_thermal_strategy(strategy, temp, target_temp)
+        # --- Etage 0: ANTICIPATION (gaming) - predit un pic AVANT le seuil ---
+        # Le predicteur (regression sur la pente) dit throttle_now si la temp va
+        # depasser ~88°C dans 10s -> on freine preventivement; prepare_throttle ->
+        # on bloque les hausses de clock (pas d'huile sur le feu qui arrive).
+        self.last_prediction = None
+        preempt_brake = False
+        hold_clock = False
+        if is_gaming:
+            try:
+                self.thermal_predictor.add_data_point(
+                    temp=temp, gpu_usage=data.get('gpu_usage', 0),
+                    clock_speed=clock, power_draw=data.get('gpu_power_usage', 0), fps=fps,
+                )
+                pred = self.thermal_predictor.predict()
+                self.last_prediction = pred
+                if not self.thermal_controller.emergency_active:
+                    preempt_brake = pred.recommended_action == 'throttle_now'
+                    hold_clock = pred.recommended_action == 'prepare_throttle'
+            except Exception as e:
+                logging.error(f"Predicteur thermique: {e}")
+
+        # --- Etage 1: securite (avec anticipation) + relachement quand ca refroidit ---
+        # Pic predit -> on escalade en thermal_focus (cap critical preventif) meme si
+        # la temp reelle n'a pas encore atteint le seuil.
+        eff_strategy = 'thermal_focus' if preempt_brake else strategy
+        self.thermal_controller.apply_thermal_strategy(eff_strategy, temp, target_temp)
         if self.thermal_controller.emergency_active:
             return  # on freine: pas de controle fin tant que ca chauffe
 
         # --- Etage 2: controle fin sweet spot (GAMING seulement) ---
-        if profile.get('category', '') != 'gaming':
+        if not is_gaming:
             return  # local_ai/browser: securite thermique seule
-
-        fps = data.get('fps_estimate', 0)
-        clock = int(data.get('gpu_clock_current', 0) or 0)
 
         # Nourrit l'apprentissage (les points invalides sont filtres en interne).
         try:
@@ -699,7 +736,12 @@ class UniversalGPUMonitor:
         # Recommandation temps-reel -> cap continu vers le sweet spot.
         try:
             rec = self.sweet_spot.get_real_time_recommendation(temp, fps, clock or 2100)
-            if rec.get('action') not in (None, 'none') and rec.get('target_clock'):
+            action = rec.get('action')
+            # Anticipation: si un pic approche (prepare_throttle), on n'AUGMENTE pas
+            # le clock (on attend que ca passe). Les baisses restent autorisees.
+            if hold_clock and action == 'increase_clock':
+                action = 'none'
+            if action not in (None, 'none') and rec.get('target_clock'):
                 self.thermal_controller.apply_target_clock(int(rec['target_clock']), rec.get('reason', ''))
         except Exception as e:
             logging.error(f"Sweet spot reco: {e}")
