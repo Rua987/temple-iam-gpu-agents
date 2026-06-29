@@ -46,15 +46,26 @@ Anything not in this table is **untested**. It may work — please tell me if it
 git clone https://github.com/Rua987/temple-iam-gpu-agents.git
 cd temple-iam-gpu-agents
 
-# Dependencies (no requirements file yet — these are the ones that matter)
-pip install GPUtil psutil pynvml
+# Dependencies
+pip install -r requirements.txt
 
-# Start the adaptive monitor (auto-detects the active game)
+# 1) Read-only diagnostic FIRST (modifies nothing, writes diagnostic_report.txt)
+python diagnostic.py
+
+# 2) Dry-run: see what the agent WOULD do, with no real GPU action
+python universal_gpu_monitor.py --dry-run
+
+# 3) Live run (auto-detects the active game/workload)
 python universal_gpu_monitor.py
-
-# Optional: thermal optimizer with per-game profiles
-python temple_iam_thermal_optimizer.py
 ```
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Simulate everything (detection, scoring, display) — **no real GPU action**. Use this first. |
+| `--gpu-index N` | Target a specific GPU (multi-GPU). Default `0`. |
+| `--interval S` | Polling interval in seconds (or env `MONITOR_INTERVAL`). Default `1.0`. |
 
 ## Quick start (Docker)
 
@@ -69,97 +80,56 @@ Full Docker details: [README-DOCKER.md](README-DOCKER.md).
 
 ---
 
-## Autonomous tuning (experimental)
+## How the thermal control works
 
-`gpu_autoresearch.py` runs an **active experiment** instead of relying on fixed
-profiles: it sweeps a set of GPU clock caps, holds each for a measurement
-window, records the real temperature / utilisation / power / VRAM (nvidia-smi)
-plus a performance signal, then locks in the most efficient cap for the current
-workload and remembers it. It works for **games** (FPS) and **local LLMs**
-(tokens/second).
+The monitor scores the live workload every second (`performance_scorer`) and
+drives a **3-tier thermal control**:
 
-```bash
-# Idle demo of the sweep mechanics (no game/model needed)
-python gpu_autoresearch.py
+- **Tier 0 — anticipation** (`thermal_ml_predictor`): a short linear-regression
+  forecast of temperature. If a spike is predicted (e.g. >88 °C within ~10 s) it
+  brakes *before* the threshold instead of reacting after the fact.
+- **Tier 1 — safety**: a hard emergency cap (`workload_thermal_controller`) that
+  takes absolute priority whenever temperature actually derails.
+- **Tier 2 — fine control** (`sweet_spot_finder`): in the normal range it converges
+  the clock cap continuously toward the learned per-game optimal (efficiency =
+  FPS / temperature-rise), instead of jumping between discrete steps.
 
-# Real gaming run — launch the game first, with MSI Afterburner / RTSS
-# running and its FPS overlay on; optional process-name filter:
-python gpu_autoresearch.py game cyberpunk
+Real FPS come from **RTSS shared memory** (needs MSI Afterburner / RTSS running and
+hooking the game). Without RTSS it falls back to a utilisation-based estimate,
+clearly labelled `(estimated)` — no crash.
 
-# Real local-LLM run via Ollama (sweeps lower clocks; inference is memory-bound)
-python gpu_autoresearch.py llm qwen3.5:2b
-```
+### Gaming vs AI gating
 
-The performance signal is pluggable: FPS comes from **RTSS shared memory**
-(`make_rtss_fps_provider`, needs RTSS/MSI Afterburner running and hooking the
-game), and tokens/s from the **Ollama API** (`make_ollama_provider`). Notes:
+Gaming-only features — RTSS FPS, the upscaling advisor, Magpie orchestration, the
+sweet-spot fine control and spike prediction — **never run on `local_ai` workloads**.
+When the agent detects Ollama or a training process it stays **pure thermal**: no
+upscaling, no FPS-based logic, just the safety brake. The dashboard switches to an
+AI view (power / clock instead of FPS).
 
-- A temperature guard aborts the sweep, and clocks are always reset (or the
-  chosen optimum applied) when it ends.
-- Without a performance signal (no game hooked / no RTSS) it still sweeps and
-  reports the thermal data, but picks a cap by a utilisation proxy and flags
-  `perf_signal=False` — the meaningful perf-vs-temperature trade-off only
-  appears under a real workload.
-- Measured example (RTX 2070, `qwen3.5:2b` via Ollama): capping at **1200 MHz**
-  gave higher tokens/s than uncapped 1950 MHz while running cooler and at lower
-  power — inference is memory-bound, so the extra clock only added heat.
+### Upscaling (gaming only)
 
----
-
-## Three integrated features (new)
-
-### 1. Autonomous auto-tuning in the main monitor
-`universal_gpu_monitor.py` now launches auto-tuning in a background thread
-when an unknown game or workload is detected. It discovers the optimal clock cap,
-applies it, and remembers it — no user intervention needed. The monitor's
-thermal controller continues managing temperature alongside the discovered clocks.
-
-### 2. Standardized GPU benchmark (no game needed)
-`gpu_benchmark.py` is a self-contained, GPU-intensive OpenGL fractal renderer
-that runs fullscreen with no vsync. It's RTSS-hookable like a real game, so it
-works with `gpu_autoresearch` to validate auto-tuning on any machine:
-
-```bash
-# Run the benchmark (GPU-bound, no vsync)
-python gpu_benchmark.py 30       # 30 seconds
-
-# Or run with auto-tuning discovery (needs RTSS)
-python gpu_benchmark.py --sweep  # Runs sweep, applies optimum, then exits
-```
-
-Example result (RTX 2070): 50 → 96 → 127 fps at 600/1200/1950 MHz, proving
-the GPU-bound nature and clock scaling.
-
-### 3. Multi-model Ollama benchmark
-`bench_ollama_multi.py` sweeps auto-tuning across your local LLMs to discover
-the memory-bound pattern:
-
-```bash
-# Test one model
-python bench_ollama_multi.py qwen3.5:2b
-
-# Test multiple models
-python bench_ollama_multi.py qwen3.5:2b mistral:7b deepseek-r1:8b
-```
-
-Results are saved to `ollama_benchmarks.json`. **Validated pattern** (RTX 2070,
-`qwen3.5:2b`): **all LLMs are memory-bound**, preferring ~1200 MHz (63 tok/s)
-over uncapped 1950 MHz (59 tok/s), while running 3°C cooler and 20 W cheaper.
-This is the key insight: compute-bound workloads (gaming) want max clock;
-memory-bound ones (LLM inference) hit a sweet spot below max.
+The agent does **not** reimplement DLSS (it can't — DLSS needs per-frame motion
+vectors only the game engine has). Instead, when it detects a game it can
+**orchestrate an external upscaler** (Magpie / Lossless Scaling) if one is installed,
+and advise enabling in-game DLSS when it has to throttle for heat. It launches the
+tool; you trigger scaling with the tool's own hotkey.
 
 ---
 
 ## Configuration
 
-Optional `.env` file:
+The polling interval can be set via the `--interval` flag or the
+`MONITOR_INTERVAL` environment variable:
 
 ```bash
-GAME_NAME=auto        # or AlanWake2, Cyberpunk2077, ...
-TARGET_TEMP=75        # °C
-CRITICAL_TEMP=85      # °C emergency cutoff
-MONITOR_INTERVAL=1.0  # seconds
+MONITOR_INTERVAL=2.0 python universal_gpu_monitor.py
+# or
+python universal_gpu_monitor.py --interval 2.0
 ```
+
+Per-game **target / critical temperatures and FPS targets** are not global — they
+live in the game profiles (`games_database.py`, plus the profiles the agent learns
+per game). The workload is auto-detected; there is no `GAME_NAME` to set.
 
 ---
 

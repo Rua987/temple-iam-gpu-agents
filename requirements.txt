@@ -1,0 +1,10 @@
+# Temple IAM GPU Agents - dependances coeur
+# Bornes minimales (pas de pins exacts) pour rester portable Python 3.10 -> 3.12.
+# Le controle/lecture GPU passe par nvidia-smi (binaire systeme, pas un paquet pip).
+
+psutil>=5.9.0        # metriques systeme (CPU/RAM) + detection process
+numpy>=1.24.0        # regression du predicteur thermique (thermal_ml_predictor)
+GPUtil>=1.4.0        # fallback de detection GPU (les metriques principales = nvidia-smi)
+
+# Optionnel - seulement pour le dashboard web (dashboard_client.py):
+# requests>=2.28.0

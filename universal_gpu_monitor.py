@@ -45,10 +45,13 @@ from thermal_ml_predictor import ThermalMLPredictor
 # Sinon les lignes de log (detection ML, alertes...) s'impriment par-dessus le
 # dashboard chaque seconde et le rendent illisible. force=True ecrase les
 # handlers deja poses par les modules importes (detecteur, ML, scorer).
+# RotatingFileHandler: cap a 2 Mo x 3 backups pour ne pas grossir a l'infini.
+from logging.handlers import RotatingFileHandler
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler('universal_gpu_monitor.log', encoding='utf-8')],
+    handlers=[RotatingFileHandler(
+        'universal_gpu_monitor.log', maxBytes=2_000_000, backupCount=3, encoding='utf-8')],
     force=True,
 )
 
@@ -845,6 +848,10 @@ def main():
         "--gpu-index", type=int, default=0, metavar="N",
         help="Index du GPU a surveiller/controler (multi-GPU). Defaut 0 (mono-GPU).",
     )
+    parser.add_argument(
+        "--interval", type=float, default=float(os.getenv("MONITOR_INTERVAL", "1.0")),
+        metavar="S", help="Intervalle de polling en secondes (ou env MONITOR_INTERVAL). Defaut 1.0.",
+    )
     args = parser.parse_args()
 
     flags = []
@@ -856,7 +863,7 @@ def main():
     print("🎮 UNIVERSAL GPU MONITOR - DÉMARRAGE" + suffix)
 
     monitor = UniversalGPUMonitor(
-        monitor_interval=1.0,
+        monitor_interval=args.interval,
         max_history=1000,
         dry_run=args.dry_run,
         gpu_index=args.gpu_index,

@@ -1,0 +1,55 @@
+name: Bug report / Test feedback
+description: Report a problem or share test results on your GPU
+title: "[test] <GPU> - <short description>"
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing! Please run the read-only diagnostic first and paste its output below:
+        ```
+        python diagnostic.py
+        ```
+        It modifies nothing and writes `diagnostic_report.txt`.
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Diagnostic output
+      description: Paste the content of diagnostic_report.txt (or the console output of `python diagnostic.py`).
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game / workload
+      description: Which game or app, resolution and preset (or "Ollama / LLM" for AI).
+      placeholder: "Cyberpunk 2077, 1080p, path tracing"
+    validations:
+      required: false
+  - type: dropdown
+    id: ran_dry_run
+    attributes:
+      label: Did you test with --dry-run first?
+      description: "`python universal_gpu_monitor.py --dry-run` simulates with no real GPU action. Recommended before a live run."
+      options:
+        - "Yes, --dry-run looked correct then I ran live"
+        - "Yes, only --dry-run (no live run)"
+        - "No, ran live directly"
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: Temperatures, stability, FPS feel, the emergency brake / fine control behaviour, anything that broke. Honest negative reports are just as useful.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: Attach or paste relevant lines from universal_gpu_monitor.log.
+      render: text
+    validations:
+      required: false
