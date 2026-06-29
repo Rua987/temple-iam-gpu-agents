@@ -32,11 +32,23 @@ from universal_game_detector import GAME_DETECTOR, DetectedGame
 from games_database import GAMES_DB
 from gpu_ml_logger import ML_LOGGER
 from workload_thermal_controller import WorkloadThermalController
-import gpu_autoresearch
+# Optimisation pilotee par le scorer mur (PerformanceScorer + SweetSpotFinder),
+# pas par le sweep autoresearch (retire: il se faisait piéger par les samples
+# hors-charge - cf. faux positif 1500MHz/8%-util sur Cyberpunk).
+from performance_scorer import PERFORMANCE_SCORER, PerformanceState
 from rtss_reader import RTSSReader
+from external_upscaler import ExternalUpscaler
 
-# Configuration du logging
-logging.basicConfig(level=logging.INFO, format='🎮 %(asctime)s - %(levelname)s - %(message)s')
+# Configuration du logging: TOUT part dans un fichier, PAS dans la console.
+# Sinon les lignes de log (detection ML, alertes...) s'impriment par-dessus le
+# dashboard chaque seconde et le rendent illisible. force=True ecrase les
+# handlers deja poses par les modules importes (detecteur, ML, scorer).
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler('universal_gpu_monitor.log', encoding='utf-8')],
+    force=True,
+)
 
 class UniversalGPUMonitor:
     """Moniteur GPU Universel - SURVEILLANCE DIVINE MULTI-JEUX ! 🎮"""
@@ -67,10 +79,20 @@ class UniversalGPUMonitor:
         self.current_game: Optional[DetectedGame] = None
         self.current_game_profile: Optional[Dict[str, Any]] = None
 
-        # Auto-tuning: track tuned workloads to avoid re-tuning
-        self.tuned_workloads: Dict[str, int] = {}  # {workload_name: optimal_mhz}
-        self.tuning_thread: Optional[threading.Thread] = None
-        self.tuning_in_progress = False
+        # Optimisation par score: scorer mur + memo des workloads deja optimises
+        self.performance_scorer = PERFORMANCE_SCORER
+        self.optimized_workloads: set = set()  # workloads deja passes au scorer
+        self.last_score = None  # dernier PerformanceScore calcule
+        # Vrais FPS via RTSS (gaming) + conseiller upscaling (gating "gaming" only)
+        self.rtss = RTSSReader()
+        self.last_advice: Optional[str] = None
+        self.fps_is_real = False
+        # Upscaler externe (Lossless Scaling / Magpie) orchestre par l'agent,
+        # GAMING uniquement. Debounce pour ne pas le lancer/couper sans arret
+        # quand la detection de process principal clignote (Edge/Ollama).
+        self.upscaler = ExternalUpscaler()
+        self._no_game_ticks = 0
+        self._STOP_AFTER_TICKS = 10  # arrete l'upscaler apres ~10s sans jeu
 
         # Seuils d'alerte dynamiques (mis à jour selon le jeu)
         self.alert_thresholds = {
@@ -129,9 +151,37 @@ class UniversalGPUMonitor:
         finally:
             self.stop_monitoring()
 
+    def _enable_ansi(self) -> bool:
+        """Active le traitement des sequences ANSI sur la console.
+
+        Sur Windows il faut poser ENABLE_VIRTUAL_TERMINAL_PROCESSING via
+        SetConsoleMode ; le vieux truc os.system('') n'est pas fiable. Retourne
+        True si l'ANSI est utilisable (-> refresh en place), False sinon (-> cls).
+        """
+        if os.name != 'nt':
+            return True
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mode = ctypes.c_uint32()
+            if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                return False
+            ENABLE_VT = 0x0004
+            if not kernel32.SetConsoleMode(handle, mode.value | ENABLE_VT):
+                return False
+            return True
+        except Exception:
+            return False
+
     def _run_continuous_monitoring(self):
         """Exécution du monitoring continu - VISION DIVINE ! 🔮"""
-        print("\n" + "="*80)
+        # Affichage: cls a chaque frame (infaillible sur Windows). L'ANSI en
+        # place s'est avere trop fragile selon le terminal (charabia/residus);
+        # les logs partent dans un fichier donc cls suffit a un ecran propre.
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+        print("="*80)
         print("🎮 UNIVERSAL GPU MONITOR - SURVEILLANCE DIVINE MULTI-JEUX")
         print("="*80)
         print("💡 Ce système surveille TOUS les jeux automatiquement")
@@ -152,6 +202,10 @@ class UniversalGPUMonitor:
 
                 # 4. Collecte des métriques GPU
                 monitoring_data = self._collect_monitoring_data(primary_game, detected_games)
+
+                # 4.5. Vrais FPS via RTSS pour le gaming (l'estimation util-based
+                # est trompeuse: 100% util en path tracing = 2 FPS, pas 40).
+                self._inject_real_fps(monitoring_data, primary_game)
 
                 if self.current_game_profile:
                     self.thermal_controller.adjust_for_temperature(
@@ -178,6 +232,23 @@ class UniversalGPUMonitor:
                     # Détection de spikes ML
                     gpu_load = monitoring_data.get('gpu_usage', 0)
                     self.ml_logger.detect_spike(gpu_load)
+
+                # 5.7. Scoring temps-reel (remplace l'autoresearch)
+                if self.current_game_profile:
+                    score = self._score_current_workload(monitoring_data)
+                    # 5.8. Action reelle: relie la strategie du scorer au frein GPU
+                    if score is not None:
+                        self.thermal_controller.apply_thermal_strategy(
+                            score.recommended_strategy.value,
+                            monitoring_data.get("gpu_temperature", 0),
+                            self.current_game_profile.get("target_temp", 75),
+                        )
+                    # 5.9. Conseiller upscaling (gaming only) - APRES l'action
+                    # thermique, pour refleter l'etat du frein de ce tick.
+                    self._gaming_advisor(monitoring_data)
+
+                # 5.95. Cycle de vie de l'upscaler externe (gaming only, debounce)
+                self._manage_upscaler()
 
                 # 6. Affichage temps réel
                 self._display_monitoring_status(monitoring_data)
@@ -227,9 +298,9 @@ class UniversalGPUMonitor:
                     logging.info(f"✅ Profil connu appliqué: {self.current_game_profile['thermal_profile']}")
                 else:
                     logging.info(f"📋 Profil {mode} appliqué (cible {self.current_game_profile['target_temp']}°C)")
-                    # Launch auto-tuning in background for unknown/new workloads
-                    if game.custom_name not in self.tuned_workloads:
-                        self._start_auto_tuning_thread(game.custom_name, is_gaming=(category == 'gaming'))
+                    # Workload inconnu: on s'appuie sur le scorer mur en temps reel
+                    # (evalue chaque seconde dans la boucle), pas sur un sweep.
+                    self.optimized_workloads.add(game.custom_name)
             else:
                 self.current_game = None
                 self.current_game_profile = None
@@ -328,28 +399,27 @@ class UniversalGPUMonitor:
             }
 
     def _get_gpu_metrics(self) -> Dict[str, Any]:
-        """Collecte des métriques GPU - MÉTRIQUES DIVINES ! 📈"""
+        """Collecte des métriques GPU via nvidia-smi (GPURealController).
+
+        On n'utilise PLUS GPUtil: il n'est pas installe dans tous les interpreteurs
+        (ex: Python310 hors conda -> import echoue -> metriques a zero). nvidia-smi
+        marche partout et donne EN PLUS la puissance reelle et le clock courant.
+        """
         try:
-            if not self.gpu_available:
+            m = self.thermal_controller.gpu_controller.get_gpu_metrics()
+            if not m:
                 return {}
-
-            import GPUtil
-            gpus = GPUtil.getGPUs()
-
-            if not gpus:
-                return {}
-
-            gpu = gpus[0]
-
+            used = m.get('memory_used_mb', 0) or 0
+            total = m.get('memory_total_mb', 0) or 0
             return {
-                'usage': gpu.load * 100,
-                'temperature': gpu.temperature,
-                'memory_used_mb': gpu.memoryUsed,
-                'memory_total_mb': gpu.memoryTotal,
-                'memory_percent': (gpu.memoryUsed / gpu.memoryTotal * 100) if gpu.memoryTotal > 0 else 0,
-                'power_usage': 0  # GPUtil ne fournit pas cette info
+                'usage': m.get('utilization', 0),
+                'temperature': m.get('temperature', 0),
+                'memory_used_mb': used,
+                'memory_total_mb': total,
+                'memory_percent': (used / total * 100) if total > 0 else 0,
+                'power_usage': m.get('power_draw', 0),
+                'clock_current': m.get('clock_current', 0),
             }
-
         except Exception as e:
             logging.error(f"❌ Erreur métriques GPU: {str(e)}")
             return {}
@@ -371,129 +441,56 @@ class UniversalGPUMonitor:
             return target_fps * 1.1  # GPU pas saturé, potentiel FPS supérieur
 
     def _display_monitoring_status(self, data: Dict[str, Any]):
-        """Affichage du statut de monitoring - AFFICHAGE DIVIN ! 📺"""
+        """Affichage COMPACT (tient sur un ecran, ne defile pas)."""
+        # cls a chaque frame: simple et infaillible. Avec les logs en fichier,
+        # l'ecran reste propre (9 lignes, pas d'empilement).
         os.system('cls' if os.name == 'nt' else 'clear')
 
-        print("\n" + "="*80)
-        print("🎮 UNIVERSAL GPU MONITOR - SURVEILLANCE DIVINE MULTI-JEUX")
-        print("="*80)
-
-        # Temps de fonctionnement
         uptime = int(data.get('uptime_seconds', 0))
-        hours = uptime // 3600
-        minutes = (uptime % 3600) // 60
-        seconds = uptime % 60
-        print(f"⏱️  Temps de fonctionnement: {hours:02d}:{minutes:02d}:{seconds:02d}")
+        clock = f"{uptime//3600:02d}:{(uptime%3600)//60:02d}:{uptime%60:02d}"
+        print(f"🎮 GPU MONITOR · {clock} · Ctrl+C pour arreter (logs -> universal_gpu_monitor.log)")
 
-        # Jeu détecté
-        print("\n" + "-"*80)
-        print("🎮 DÉTECTION DE JEU")
-        print("-"*80)
-
+        # --- Jeu / workload (1 ligne) ---
         if data.get('game_detected'):
-            game_info = data.get('game_info', {})
-            status_icon = "✅" if game_info.get('is_known') else "🆕"
-            print(f"{status_icon} Jeu: {game_info.get('game_name', 'Inconnu')}")
-            print(f"   Processus: {game_info.get('process_name', 'N/A')}")
-            print(f"   Statut: {'Connu (profil optimisé)' if game_info.get('is_known') else 'Nouveau (profil générique)'}")
-
-            # Profil d'optimisation
-            if game_info.get('optimization_profile'):
-                profile = game_info['optimization_profile']
-                print(f"   Profil thermique: {profile.get('thermal_profile', 'N/A').upper()}")
-                print(f"   Température cible: {profile.get('target_temp', 'N/A')}°C")
-                print(f"   FPS cible: {profile.get('target_fps', 'N/A')}")
-                if profile.get('supports_dlss'):
-                    print(f"   DLSS: ✅ Supporté")
-                if profile.get('supports_ray_tracing'):
-                    print(f"   Ray Tracing: ✅ Supporté")
+            gi = data.get('game_info', {})
+            prof = gi.get('optimization_profile') or {}
+            tag = f"[{prof.get('thermal_profile','?').upper()}, cible {prof.get('target_temp','?')}°C / {prof.get('target_fps','?')} fps]"
+            print(f"Jeu: {gi.get('game_name','?')} {tag}")
         else:
-            print("⚠️  Aucun jeu détecté")
-            print(f"   {data.get('all_games_count', 0)} processus de jeu potentiels surveillés")
+            print(f"Jeu: aucun ({data.get('all_games_count', 0)} process surveilles)")
 
-        thermal = self.thermal_controller.get_display_status()
-        print("\n" + "-"*80)
-        print("🌡️  CONTRÔLE THERMIQUE ACTIF")
-        print("-"*80)
-        print(f"Mode workload:     {thermal['workload_mode']}")
-        print(f"Action en cours:   {thermal['active_action']}")
-        print(f"Afterburner:       {thermal['afterburner_profile']}")
-        print(f"Cap pilote:        {thermal['driver_cap']}")
-        print(f"Echelle IA:        {thermal['ai_ladder']}")
-        print(f"Clock verrouille:  {thermal['clock_locked']}")
-
-        # Métriques GPU
-        print("\n" + "-"*80)
-        print("🖥️  MÉTRIQUES GPU")
-        print("-"*80)
-        print(f"GPU: {data.get('gpu_name', 'N/A')}")
-
+        # --- GPU (3 lignes, barres courtes) ---
         gpu_usage = data.get('gpu_usage', 0)
         gpu_temp = data.get('gpu_temperature', 0)
         gpu_mem = data.get('gpu_memory_percent', 0)
-
-        # Barres de progression avec couleurs
-        print(f"Utilisation:  {self._create_bar(gpu_usage, 100)} {gpu_usage:5.1f}%")
-        print(f"Température:  {self._create_bar(gpu_temp, 100)} {gpu_temp:5.1f}°C")
-        print(f"Mémoire VRAM: {self._create_bar(gpu_mem, 100)} {gpu_mem:5.1f}% ({data.get('gpu_memory_used_mb', 0):.0f}/{data.get('gpu_memory_total_mb', 0):.0f} MB)")
-
-        # FPS estimé
         fps = data.get('fps_estimate', 0)
-        if fps > 0:
-            print(f"FPS estimé:   {fps:5.1f}")
+        fps_tag = f"FPS {fps:.1f} (RTSS reel)" if self.fps_is_real else f"FPS~{fps:.0f} (estime)"
+        print(f"Temp  {self._create_bar(gpu_temp, 100, 20)} {gpu_temp:5.1f}°C")
+        print(f"Util  {self._create_bar(gpu_usage, 100, 20)} {gpu_usage:5.1f}%")
+        print(f"VRAM  {self._create_bar(gpu_mem, 100, 20)} {gpu_mem:5.1f}% ({data.get('gpu_memory_used_mb',0):.0f}/{data.get('gpu_memory_total_mb',0):.0f} MB) · {fps_tag}")
 
-        # Métriques système
-        print("\n" + "-"*80)
-        print("💻 MÉTRIQUES SYSTÈME")
-        print("-"*80)
-        cpu_usage = data.get('cpu_usage', 0)
-        mem_usage = data.get('memory_usage', 0)
-        print(f"CPU:          {self._create_bar(cpu_usage, 100)} {cpu_usage:5.1f}%")
-        print(f"RAM:          {self._create_bar(mem_usage, 100)} {mem_usage:5.1f}% ({data.get('memory_available_gb', 0):.1f} GB dispo)")
+        # --- Action thermique (1 ligne, le coeur du rebranch) ---
+        thermal = self.thermal_controller.get_display_status()
+        print(f"🌡️  {thermal['active_action']} · cap pilote: {thermal['driver_cap']}")
 
-        # ML Insights - Apprentissage intelligent
-        if self.ml_session_active and data.get('game_detected'):
-            print("\n" + "-"*80)
-            print("🧠 ML INSIGHTS - APPRENTISSAGE INTELLIGENT")
-            print("-"*80)
+        # --- Score (2 lignes) ---
+        if self.last_score is not None:
+            s = self.last_score
+            b = s.breakdown
+            print(f"🎯 Score {self._create_bar(s.overall_score, 100, 20)} {s.overall_score:5.1f}/100 [{s.state.value.upper()}]")
+            rec = f" · 💡 {s.recommendations[0]}" if s.recommendations else ""
+            print(f"   T{b.thermal_score:.0f} F{b.fps_score:.0f} E{b.efficiency_score:.0f} S{b.stability_score:.0f} · {s.recommended_strategy.value} ({s.trend}){rec}")
 
-            # Tendance thermique
-            trend = self.ml_logger.get_thermal_trend()
-            trend_icons = {
-                'rising': '📈 MONTÉE',
-                'falling': '📉 DESCENTE',
-                'stable': '➡️ STABLE'
-            }
-            print(f"Tendance temp: {trend_icons.get(trend, trend)}")
+        # --- Conseiller upscaling (gaming only, si zone injouable) ---
+        if self.last_advice:
+            print(f"🎮 {self.last_advice}")
 
-            # Prédiction température
-            predicted_temp = self.ml_logger.predict_temperature(60)
-            if predicted_temp:
-                current_temp = data.get('gpu_temperature', 0)
-                delta = predicted_temp - current_temp
-                delta_sign = "+" if delta > 0 else ""
-                print(f"Préd. +60s:   {predicted_temp:.1f}°C ({delta_sign}{delta:.1f}°C)")
+        # --- Upscaler externe (statut) ---
+        print(f"🔧 Upscaler externe: {self.upscaler.status_line()}")
 
-            # Stats session
-            ml_stats = self.ml_logger.get_session_stats()
-            print(f"Session:      {ml_stats['duration_minutes']:.1f} min | {ml_stats['datapoints']} points")
-            if ml_stats['spikes_detected'] > 0:
-                print(f"⚠️  Spikes GPU:   {ml_stats['spikes_detected']} détecté(s)")
-
-        # Tous les jeux détectés
-        if data.get('all_games_count', 0) > 1:
-            print("\n" + "-"*80)
-            print(f"🎯 AUTRES JEUX DÉTECTÉS ({data.get('all_games_count', 0) - 1})")
-            print("-"*80)
-            for game in data.get('all_games', [])[:5]:
-                if data.get('game_detected') and game['name'] == data['game_info']['game_name']:
-                    continue
-                status = "✅" if game['is_known'] else "🆕"
-                print(f"  {status} {game['name']} ({game['process']})")
-
-        print("\n" + "="*80)
-        print("💡 Appuie sur Ctrl+C pour arrêter le monitoring")
-        print("="*80)
+        # --- Systeme (1 ligne) ---
+        print(f"💻 CPU {data.get('cpu_usage',0):.0f}% · RAM {data.get('memory_usage',0):.0f}% ({data.get('memory_available_gb',0):.1f} GB libre)")
+        print('', end='', flush=True)
 
     def _create_bar(self, value: float, max_value: float, length: int = 30) -> str:
         """Crée une barre de progression"""
@@ -565,6 +562,8 @@ class UniversalGPUMonitor:
             self.ml_session_active = False
 
         self.thermal_controller.release()
+        # Arrete l'upscaler externe SI c'est nous qui l'avons lance.
+        self.upscaler.stop()
         logging.info("🛑 Monitoring arrêté")
 
         # Statistiques finales
@@ -585,50 +584,118 @@ class UniversalGPUMonitor:
             print(f"Alertes générées: {len(self.alert_history)}")
             print("="*80)
 
-    def _start_auto_tuning_thread(self, workload_name: str, is_gaming: bool = True):
-        """Launch auto-tuning in a background thread (non-blocking)."""
-        if self.tuning_in_progress:
-            logging.info(f"🔄 Auto-tuning déjà en cours, {workload_name} en attente")
-            return
-        self.tuning_in_progress = True
-        self.tuning_thread = threading.Thread(
-            target=self._auto_tune_worker,
-            args=(workload_name, is_gaming),
-            daemon=True
-        )
-        self.tuning_thread.start()
+    def _score_current_workload(self, data: Dict[str, Any]):
+        """Evalue le workload courant via le scorer mur (PerformanceScorer).
 
-    def _auto_tune_worker(self, workload_name: str, is_gaming: bool):
-        """Worker thread: run the auto-tuning sweep and apply the result."""
+        Remplace le sweep autoresearch: au lieu de balayer des clocks et de se
+        faire piéger par une scène hors-charge, on note la perf reelle chaque
+        seconde. Le score d'efficacite penalise la sous-charge (gpu_usage bas),
+        donc plus de faux positif type 1500MHz/8%-util.
+        """
+        if not self.current_game_profile:
+            return None
+
+        profile = self.current_game_profile
         try:
-            logging.info(f"🚀 Auto-tuning de '{workload_name}' (gaming={is_gaming}) - durée ~30s")
-
-            # Prepare perf provider for gaming (RTSS FPS) or just use default (None = proxy)
-            perf_provider = None
-            if is_gaming:
-                rtss = RTSSReader()
-                if rtss.available:
-                    perf_provider = lambda: rtss.read_max_fps(workload_name)
-
-            # Run the sweep
-            optimal_mhz = gpu_autoresearch.auto_tune_workload(
-                workload_name=workload_name,
-                perf_provider=perf_provider,
-                perf_unit="fps" if is_gaming else "tok/s",
-                is_gaming=is_gaming,
-                duration_s=30.0  # Total sweep time
+            score = self.performance_scorer.calculate_score(
+                temperature=data.get('gpu_temperature', 0),
+                gpu_usage=data.get('gpu_usage', 0),
+                fps_current=data.get('fps_estimate', 0),
+                clock_max=profile.get('max_clock_mhz', 2100),
+                power_draw=data.get('gpu_power_usage', 0),
+                vram_usage_percent=data.get('gpu_memory_percent', 0),
+                cpu_usage=data.get('cpu_usage', 0),
+                game_name=data.get('game_info', {}).get('game_name', ''),
+                thermal_profile=profile.get('thermal_profile', 'medium'),
             )
-
-            if optimal_mhz:
-                self.tuned_workloads[workload_name] = optimal_mhz
-                logging.info(f"✅ Auto-tuning '{workload_name}': optimum = {optimal_mhz}MHz")
-            else:
-                logging.warning(f"⚠️ Auto-tuning '{workload_name}' inconclusive (GPU read-only or no signal)")
-
+            self.last_score = score
+            return score
         except Exception as e:
-            logging.error(f"❌ Auto-tuning error for '{workload_name}': {e}")
-        finally:
-            self.tuning_in_progress = False
+            logging.error(f"❌ Scoring erreur: {e}")
+            return None
+
+    def _inject_real_fps(self, data: Dict[str, Any], primary_game) -> None:
+        """Remplace le fps_estimate (util-based, trompeur) par les VRAIS FPS RTSS
+        quand un jeu est detecte. Sans RTSS, on garde l'estimation."""
+        self.fps_is_real = False
+        if not primary_game or not self.rtss.available:
+            return
+        try:
+            # filtre = nom du process sans extension (ex: Cyberpunk2077.exe -> cyberpunk2077)
+            name = (primary_game.process_name or "").lower().replace(".exe", "")
+            fps = self.rtss.read_max_fps(name) if name else 0.0
+            if fps > 0:
+                data['fps_estimate'] = round(fps, 1)
+                self.fps_is_real = True
+        except Exception as e:
+            logging.error(f"RTSS read erreur: {e}")
+
+    def _gaming_advisor(self, data: Dict[str, Any]) -> Optional[str]:
+        """Conseiller upscaling - GATING GAMING UNIQUEMENT.
+
+        Ne se declenche QUE pour category == 'gaming'. Pour local_ai (Ollama,
+        training GPT-2) il ne fait jamais rien -> l'agent reste pur thermique.
+
+        Detecte la zone injouable: FPS REELS tres bas + GPU sature (compute-bound,
+        donc c'est les settings, pas un menu) -> recommande l'upscaling.
+        """
+        self.last_advice = None
+        profile = self.current_game_profile or {}
+        if profile.get('category', 'gaming') != 'gaming':
+            return None  # local_ai / browser: pas de conseil upscaling (jamais Ollama/training)
+
+        fps = data.get('fps_estimate', 0)
+        util = data.get('gpu_usage', 0)
+        temp = data.get('gpu_temperature', 0)
+        target_fps = profile.get('target_fps', 45)
+
+        # --- Cas 1 (PRIORITAIRE): l'agent FREINE pour la chaleur ---
+        # DLSS reduit la charge -> moins de chaleur -> l'agent arrete de freiner
+        # -> on recupere les FPS perdus au cap, SANS le compromis thermique.
+        # Ne depend PAS de RTSS: on connait l'etat du frein de facon fiable.
+        tc = self.thermal_controller
+        if getattr(tc, 'emergency_active', False):
+            cap = getattr(tc, 'emergency_profile', None) or 'cap thermique'
+            self.last_advice = (
+                f"L'agent BRIDE le GPU ({cap}, {temp:.0f}°C) -> tu perds des FPS pour "
+                f"sauver la temp. Active DLSS Performance Ultra: -charge -> -chaleur -> "
+                f"l'agent relache -> tu RECUPERES les FPS sans le compromis thermique."
+            )
+            return self.last_advice
+
+        # --- Cas 2: zone injouable via VRAIS FPS (RTSS) + GPU sature ---
+        if self.fps_is_real and fps > 0 and fps < min(25.0, target_fps * 0.6) and util >= 92:
+            gain = max(2, int(target_fps / fps))
+            self.last_advice = (
+                f"ZONE INJOUABLE ({fps:.1f} fps reels, GPU {util:.0f}%) -> "
+                f"active DLSS Performance Ultra + Ray Reconstruction "
+                f"(ou baisse Path Tracing/RT) · gain attendu ~{gain}x sans cout thermique"
+            )
+        return self.last_advice
+
+    def _manage_upscaler(self) -> None:
+        """Cycle de vie de l'upscaler externe - GAMING UNIQUEMENT.
+
+        - jeu (category gaming) actif -> lance l'upscaler (s'il est installe)
+        - plus de jeu pendant ~10 ticks -> l'arrete (libere les ressources)
+        Jamais lance pour local_ai (Ollama/training) ni browser.
+        Le debounce evite de le lancer/couper en boucle quand la detection de
+        process principal clignote (Edge/Ollama qui passent 'principal').
+        """
+        if not self.upscaler.available:
+            return  # rien d'installe: no-op silencieux
+
+        profile = self.current_game_profile or {}
+        is_gaming = bool(profile) and profile.get('category', '') == 'gaming'
+
+        if is_gaming:
+            self._no_game_ticks = 0
+            if not self.upscaler.running:
+                self.upscaler.start()
+        else:
+            self._no_game_ticks += 1
+            if self.upscaler.running and self._no_game_ticks >= self._STOP_AFTER_TICKS:
+                self.upscaler.stop()
 
 
 def main():

@@ -21,8 +21,58 @@ class WorkloadThermalController:
         self.gpu_controller = gpu_controller or GPURealController()
         self.current_mode: Optional[str] = None
         self.current_ai_profile: Optional[str] = None
+        # Override thermique pilote par le scorer (emergency_throttle/thermal_focus).
+        # Quand actif, il prime sur le mode workload et n'est PAS relache par les
+        # bascules de process principal (Edge/Ollama qui clignotent).
+        self.emergency_active = False
+        self.emergency_profile: Optional[str] = None
 
     AI_PROFILES = frozenset({"ai_soft", "ai_throttle", "ai_brake"})
+
+    # Strategie du scorer -> profil de frein reel a appliquer.
+    STRATEGY_CAPS = {
+        "emergency_throttle": "heavy_cool",  # 900 MHz - frein dur
+        "thermal_focus": "critical",         # 1200 MHz - refroidissement
+    }
+
+    def apply_thermal_strategy(self, strategy: str, temp_c: float, target_temp: float) -> Optional[str]:
+        """Relie la decision du scorer a une action GPU concrete.
+
+        - emergency_throttle / thermal_focus (ou temp >> cible) -> applique un cap
+          de frein immediat, quel que soit le workload courant.
+        - temp revenue nettement sous la cible -> relache l'override.
+        Retourne le profil applique, 'released', ou None si rien a faire.
+        """
+        if self.gpu_controller.capabilities == GPUControlCapability.READ_ONLY:
+            return None
+
+        wanted = self.STRATEGY_CAPS.get(strategy)
+        # Filet de securite: meme si le scorer dit 'balanced', une temp trop haute
+        # au-dessus de la cible force le frein dur.
+        if wanted is None and temp_c >= target_temp + 5:
+            wanted = "heavy_cool"
+
+        if wanted:
+            if self.gpu_controller.current_profile != wanted:
+                self.gpu_controller.apply_profile(wanted)
+                logging.warning(
+                    "URGENCE thermique %sC (cible %sC, %s) -> cap %s force",
+                    int(temp_c), int(target_temp), strategy, wanted,
+                )
+            self.emergency_active = True
+            self.emergency_profile = wanted
+            return wanted
+
+        # Plus de demande de frein: relache si la temp est bien retombee.
+        if self.emergency_active and temp_c <= target_temp - 3:
+            self.emergency_active = False
+            self.emergency_profile = None
+            self.gpu_controller.reset_gpu_clocks()
+            # Re-applique le mode workload normal (ex: heavy_cool gaming).
+            self.current_mode = None
+            logging.info("Fin urgence thermique (%sC <= cible %sC)", int(temp_c), int(target_temp))
+            return "released"
+        return None
 
     def resolve_mode(self, optimization_profile: Optional[Dict]) -> str:
         if not optimization_profile:
@@ -74,6 +124,10 @@ class WorkloadThermalController:
 
     def apply_for_workload(self, optimization_profile: Optional[Dict]) -> bool:
         target_mode = self.resolve_mode(optimization_profile)
+        # Pendant une urgence thermique, on ne relache PAS le frein meme si un
+        # process "stock" (Edge/Ollama) devient brievement principal.
+        if self.emergency_active and target_mode == "stock":
+            return True
         if target_mode == self.current_mode:
             return True
 
@@ -154,7 +208,9 @@ class WorkloadThermalController:
             driver_cap = self.gpu_controller.current_profile
 
         ai_step = self.current_ai_profile or "none"
-        if mode == "heavy_cool":
+        if self.emergency_active:
+            active = f"🚨 URGENCE thermique — frein {self.emergency_profile} force"
+        elif mode == "heavy_cool":
             active = mode_labels["heavy_cool"]
         elif mode == "efficient_only" and ai_step in self.AI_PROFILES:
             active = ai_labels.get(ai_step, ai_step)
