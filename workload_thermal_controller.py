@@ -31,6 +31,9 @@ class WorkloadThermalController:
         # bascules de process principal (Edge/Ollama qui clignotent).
         self.emergency_active = False
         self.emergency_profile: Optional[str] = None
+        # Controle fin (sweet spot): cap clock continu en regime normal, distinct
+        # du frein d'urgence. None = pas de controle fin actif.
+        self.fine_control_clock: Optional[int] = None
 
     AI_PROFILES = frozenset({"ai_soft", "ai_throttle", "ai_brake"})
 
@@ -66,6 +69,7 @@ class WorkloadThermalController:
                 )
             self.emergency_active = True
             self.emergency_profile = wanted
+            self.fine_control_clock = None  # l'urgence prime sur le controle fin
             return wanted
 
         # Plus de demande de frein: relache si la temp est bien retombee.
@@ -78,6 +82,27 @@ class WorkloadThermalController:
             logging.info("Fin urgence thermique (%sC <= cible %sC)", int(temp_c), int(target_temp))
             return "released"
         return None
+
+    def apply_target_clock(self, max_clock: int, reason: str = "") -> bool:
+        """Controle FIN (sweet spot): verrouille le clock max a une cible continue.
+
+        Distinct du frein d'urgence: sert a converger vers le clock optimal
+        perf/qualite en regime normal (pas de surchauffe). Ne fait rien si une
+        urgence thermique est active (elle prime).
+        """
+        if self.emergency_active:
+            return False
+        if self.gpu_controller.capabilities == GPUControlCapability.READ_ONLY:
+            return False
+        max_clock = int(max_clock)
+        if self.fine_control_clock == max_clock and self.gpu_controller.is_clock_locked:
+            return True  # deja a la cible, rien a faire
+        ok = self.gpu_controller.lock_gpu_clocks(300, max_clock)
+        if ok:
+            self.fine_control_clock = max_clock
+            logging.info("Controle fin (sweet spot): cap %d MHz%s",
+                         max_clock, f" - {reason}" if reason else "")
+        return ok
 
     def resolve_mode(self, optimization_profile: Optional[Dict]) -> str:
         if not optimization_profile:
@@ -173,6 +198,7 @@ class WorkloadThermalController:
         return False
 
     def _release(self) -> bool:
+        self.fine_control_clock = None  # plus de controle fin au repos
         afterburner_ok = self.afterburner.apply_profile("stock")
         clock_ok = self._reset_driver_cap()
         if afterburner_ok or clock_ok:
@@ -211,10 +237,14 @@ class WorkloadThermalController:
         driver_cap = "non verrouille"
         if self.gpu_controller.is_clock_locked and self.gpu_controller.current_profile:
             driver_cap = self.gpu_controller.current_profile
+        elif self.fine_control_clock and self.gpu_controller.is_clock_locked:
+            driver_cap = f"{self.fine_control_clock} MHz (fin)"
 
         ai_step = self.current_ai_profile or "none"
         if self.emergency_active:
             active = f"🚨 URGENCE thermique — frein {self.emergency_profile} force"
+        elif self.fine_control_clock:
+            active = f"🎚️ Controle fin (sweet spot) — cap {self.fine_control_clock} MHz"
         elif mode == "heavy_cool":
             active = mode_labels["heavy_cool"]
         elif mode == "efficient_only" and ai_step in self.AI_PROFILES:

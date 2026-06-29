@@ -38,6 +38,7 @@ from workload_thermal_controller import WorkloadThermalController
 from performance_scorer import PERFORMANCE_SCORER, PerformanceState
 from rtss_reader import RTSSReader
 from external_upscaler import ExternalUpscaler
+from sweet_spot_finder import SweetSpotFinder
 
 # Configuration du logging: TOUT part dans un fichier, PAS dans la console.
 # Sinon les lignes de log (detection ML, alertes...) s'impriment par-dessus le
@@ -99,6 +100,11 @@ class UniversalGPUMonitor:
         self.upscaler = ExternalUpscaler(dry_run=dry_run)
         self._no_game_ticks = 0
         self._STOP_AFTER_TICKS = 10  # arrete l'upscaler apres ~10s sans jeu
+        # Sweet spot finder: controle FIN (cap continu vers le clock optimal
+        # perf/qualite appris par jeu). GAMING uniquement. Le frein d'urgence
+        # reste le plancher de securite.
+        self.sweet_spot = SweetSpotFinder()
+        self._analyze_counter = 0
 
         # Seuils d'alerte dynamiques (mis à jour selon le jeu)
         self.alert_thresholds = {
@@ -242,13 +248,9 @@ class UniversalGPUMonitor:
                 # 5.7. Scoring temps-reel (remplace l'autoresearch)
                 if self.current_game_profile:
                     score = self._score_current_workload(monitoring_data)
-                    # 5.8. Action reelle: relie la strategie du scorer au frein GPU
-                    if score is not None:
-                        self.thermal_controller.apply_thermal_strategy(
-                            score.recommended_strategy.value,
-                            monitoring_data.get("gpu_temperature", 0),
-                            self.current_game_profile.get("target_temp", 75),
-                        )
+                    # 5.8. Pilote thermique: securite (frein d'urgence) + controle
+                    # fin (sweet spot) en regime normal.
+                    self._apply_thermal_control(monitoring_data, score)
                     # 5.9. Conseiller upscaling (gaming only) - APRES l'action
                     # thermique, pour refleter l'etat du frein de ce tick.
                     self._gaming_advisor(monitoring_data)
@@ -298,6 +300,8 @@ class UniversalGPUMonitor:
 
                 category = self.current_game_profile.get('category', 'gaming')
                 mode = self.current_game_profile.get('optimization_mode', 'active')
+                # Sweet spot = controle fin GAMING uniquement (jamais local_ai).
+                self.sweet_spot.set_current_game(game.custom_name if category == 'gaming' else None)
                 self.thermal_controller.apply_for_workload(self.current_game_profile)
                 logging.info(f"🎮 Workload actif: {game.custom_name} ({game.process_name}) [{category}/{mode}]")
                 if game.is_known:
@@ -310,6 +314,7 @@ class UniversalGPUMonitor:
             else:
                 self.current_game = None
                 self.current_game_profile = None
+                self.sweet_spot.set_current_game(None)
                 self.thermal_controller.apply_for_workload(None)
                 logging.info("🎮 Aucun jeu actif")
 
@@ -644,6 +649,60 @@ class UniversalGPUMonitor:
         except Exception as e:
             logging.error(f"❌ Scoring erreur: {e}")
             return None
+
+    def _apply_thermal_control(self, data: Dict[str, Any], score) -> None:
+        """Pilote thermique a deux etages:
+
+        1. SECURITE (plancher, tous workloads): le frein d'urgence du scorer
+           (heavy_cool/critical) prime des que la temp derape. Non negociable.
+        2. CONTROLE FIN (gaming uniquement): en regime normal, on converge vers le
+           clock optimal perf/qualite APPRIS par le sweet_spot_finder (cap continu,
+           pas les paliers discrets). Le LLM/training n'a pas de FPS -> pas de
+           controle fin, juste la securite.
+        """
+        profile = self.current_game_profile or {}
+        temp = data.get('gpu_temperature', 0)
+        target_temp = profile.get('target_temp', 75)
+        strategy = score.recommended_strategy.value if score is not None else 'balanced'
+
+        # --- Etage 1: securite (gere aussi le relachement quand la temp retombe) ---
+        self.thermal_controller.apply_thermal_strategy(strategy, temp, target_temp)
+        if self.thermal_controller.emergency_active:
+            return  # on freine: pas de controle fin tant que ca chauffe
+
+        # --- Etage 2: controle fin sweet spot (GAMING seulement) ---
+        if profile.get('category', '') != 'gaming':
+            return  # local_ai/browser: securite thermique seule
+
+        fps = data.get('fps_estimate', 0)
+        clock = int(data.get('gpu_clock_current', 0) or 0)
+
+        # Nourrit l'apprentissage (les points invalides sont filtres en interne).
+        try:
+            self.sweet_spot.add_data_point(
+                clock_mhz=clock, temperature=temp, fps=fps,
+                gpu_usage=data.get('gpu_usage', 0),
+                power_draw=data.get('gpu_power_usage', 0),
+            )
+        except Exception as e:
+            logging.error(f"Sweet spot add_data_point: {e}")
+
+        # Rafraichit periodiquement le sweet spot appris (~30s).
+        self._analyze_counter += 1
+        if self._analyze_counter >= 30:
+            self._analyze_counter = 0
+            try:
+                self.sweet_spot.analyze_sweet_spot()
+            except Exception as e:
+                logging.error(f"Sweet spot analyse: {e}")
+
+        # Recommandation temps-reel -> cap continu vers le sweet spot.
+        try:
+            rec = self.sweet_spot.get_real_time_recommendation(temp, fps, clock or 2100)
+            if rec.get('action') not in (None, 'none') and rec.get('target_clock'):
+                self.thermal_controller.apply_target_clock(int(rec['target_clock']), rec.get('reason', ''))
+        except Exception as e:
+            logging.error(f"Sweet spot reco: {e}")
 
     def _inject_real_fps(self, data: Dict[str, Any], primary_game) -> None:
         """Remplace le fps_estimate (util-based, trompeur) par les VRAIS FPS RTSS
