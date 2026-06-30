@@ -47,10 +47,26 @@ from thermal_ml_predictor import ThermalMLPredictor
 # handlers deja poses par les modules importes (detecteur, ML, scorer).
 # RotatingFileHandler: cap a 2 Mo x 3 backups pour ne pas grossir a l'infini.
 from logging.handlers import RotatingFileHandler
+
+
+class _SafeRotatingFileHandler(RotatingFileHandler):
+    """Tolerant a Windows: si le .log est tenu ouvert par un autre process
+    (WinError 32 au renommage), on rouvre le flux courant et on desactive la
+    rotation pour ce process au lieu de spammer des erreurs de logging."""
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except (PermissionError, OSError):
+            if self.stream is None:
+                self.stream = self._open()
+            self.maxBytes = 0  # stoppe les tentatives de rollover (anti-flood)
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[RotatingFileHandler(
+    handlers=[_SafeRotatingFileHandler(
         'universal_gpu_monitor.log', maxBytes=2_000_000, backupCount=3, encoding='utf-8')],
     force=True,
 )
