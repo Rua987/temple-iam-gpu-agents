@@ -13,8 +13,9 @@ env/
 ENV/
 .venv
 
-# Logs
+# Logs (y compris les backups de rotation .log.1/.log.2)
 *.log
+*.log.*
 logs/
 
 # IDE

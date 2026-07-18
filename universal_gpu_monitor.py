@@ -40,6 +40,7 @@ from rtss_reader import RTSSReader
 from external_upscaler import ExternalUpscaler
 from sweet_spot_finder import SweetSpotFinder
 from thermal_ml_predictor import ThermalMLPredictor
+from cpu_thermal_controller import CPUThermalController
 
 # Configuration du logging: TOUT part dans un fichier, PAS dans la console.
 # Sinon les lignes de log (detection ML, alertes...) s'impriment par-dessus le
@@ -74,7 +75,7 @@ logging.basicConfig(
 class UniversalGPUMonitor:
     """Moniteur GPU Universel - SURVEILLANCE DIVINE MULTI-JEUX ! 🎮"""
 
-    def __init__(self, monitor_interval: float = 1.0, max_history: int = 1000, dry_run: bool = False, gpu_index: int = 0):
+    def __init__(self, monitor_interval: float = 1.0, max_history: int = 1000, dry_run: bool = False, gpu_index: int = 0, cpu_control: bool = False):
         """
         Initialisation du moniteur GPU universel
 
@@ -129,6 +130,10 @@ class UniversalGPUMonitor:
         # freiner AVANT d'atteindre le seuil. GAMING uniquement.
         self.thermal_predictor = ThermalMLPredictor()
         self.last_prediction = None
+        # Etage CPU (opt-in --cpu-control): frein par paliers de max processor
+        # state (powercfg). TOUS workloads - sur laptop, CPU et GPU partagent la
+        # dissipation, donc freiner le CPU aide aussi le GPU.
+        self.cpu_controller = CPUThermalController(dry_run=dry_run) if cpu_control else None
 
         # Seuils d'alerte dynamiques (mis à jour selon le jeu)
         self.alert_thresholds = {
@@ -281,6 +286,11 @@ class UniversalGPUMonitor:
 
                 # 5.95. Cycle de vie de l'upscaler externe (gaming only, debounce)
                 self._manage_upscaler()
+
+                # 5.97. Etage CPU (si --cpu-control): frein par paliers powercfg
+                # selon la temp CPU. Tous workloads (dissipation partagee laptop).
+                if self.cpu_controller is not None:
+                    self.cpu_controller.update()
 
                 # 6. Affichage temps réel
                 self._display_monitoring_status(monitoring_data)
@@ -556,8 +566,9 @@ class UniversalGPUMonitor:
         else:
             print(f"🔧 Upscaler externe: {self.upscaler.status_line()}")
 
-        # --- Systeme (1 ligne) ---
-        print(f"💻 CPU {data.get('cpu_usage',0):.0f}% · RAM {data.get('memory_usage',0):.0f}% ({data.get('memory_available_gb',0):.1f} GB libre)")
+        # --- Systeme (1 ligne, + etage CPU si actif) ---
+        cpu_extra = f" · 🧊 {self.cpu_controller.status_line()}" if self.cpu_controller is not None else ""
+        print(f"💻 CPU {data.get('cpu_usage',0):.0f}% · RAM {data.get('memory_usage',0):.0f}% ({data.get('memory_available_gb',0):.1f} GB libre){cpu_extra}")
         print('', end='', flush=True)
 
     def _create_bar(self, value: float, max_value: float, length: int = 30) -> str:
@@ -632,6 +643,10 @@ class UniversalGPUMonitor:
         self.thermal_controller.release()
         # Arrete l'upscaler externe SI c'est nous qui l'avons lance.
         self.upscaler.stop()
+        # Restaure le max processor state a 100% (powercfg PERSISTE apres le
+        # process - sans ca, le CPU resterait bride apres l'arret du monitor).
+        if self.cpu_controller is not None:
+            self.cpu_controller.release()
         logging.info("🛑 Monitoring arrêté")
 
         # Statistiques finales
@@ -868,6 +883,12 @@ def main():
         "--interval", type=float, default=float(os.getenv("MONITOR_INTERVAL", "1.0")),
         metavar="S", help="Intervalle de polling en secondes (ou env MONITOR_INTERVAL). Defaut 1.0.",
     )
+    parser.add_argument(
+        "--cpu-control", action="store_true",
+        help="PROTOTYPE: active l'etage CPU - frein par paliers de 'max processor "
+             "state' (powercfg) selon la temp CPU (zone ACPI). Restaure 100%% a l'arret. "
+             "Respecte --dry-run.",
+    )
     args = parser.parse_args()
 
     flags = []
@@ -875,6 +896,8 @@ def main():
         flags.append("DRY-RUN")
     if args.gpu_index:
         flags.append(f"GPU#{args.gpu_index}")
+    if args.cpu_control:
+        flags.append("CPU-CONTROL")
     suffix = f" [{', '.join(flags)}]" if flags else ""
     print("🎮 UNIVERSAL GPU MONITOR - DÉMARRAGE" + suffix)
 
@@ -883,6 +906,7 @@ def main():
         max_history=1000,
         dry_run=args.dry_run,
         gpu_index=args.gpu_index,
+        cpu_control=args.cpu_control,
     )
 
     monitor.start_monitoring()
