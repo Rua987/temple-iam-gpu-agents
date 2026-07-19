@@ -43,12 +43,23 @@ class WorkloadThermalController:
         "thermal_focus": "critical",         # 1200 MHz - refroidissement
     }
 
-    def apply_thermal_strategy(self, strategy: str, temp_c: float, target_temp: float) -> Optional[str]:
+    # Sous ce taux d'utilisation, le GPU ne "peine" plus: s'il est aussi sous la
+    # cible, garder un frein n'a plus de sens (voir RELEASE ci-dessous).
+    IDLE_UTIL_PCT = 40.0
+
+    def apply_thermal_strategy(self, strategy: str, temp_c: float, target_temp: float,
+                               gpu_util: Optional[float] = None) -> Optional[str]:
         """Relie la decision du scorer a une action GPU concrete.
 
         - emergency_throttle / thermal_focus (ou temp >> cible) -> applique un cap
           de frein immediat, quel que soit le workload courant.
-        - temp revenue nettement sous la cible -> relache l'override.
+        - RELACHEMENT (deux portes de sortie, cf. bug du verrouillage):
+          * temp <= cible-3 : refroidi net, chemin rapide ;
+          * temp < cible ET util faible : plus de charge -> plus de raison de freiner.
+          La 2e porte est indispensable: le cap lui-meme peut stabiliser la temp
+          JUSTE au-dessus de cible-3 (ex. 68C pour une cible de 70C). Le frein
+          refroidit alors assez pour devenir inutile, mais pas assez pour se
+          relacher, et s'auto-entretient indefiniment.
         Retourne le profil applique, 'released', ou None si rien a faire.
         """
         if self.gpu_controller.capabilities == GPUControlCapability.READ_ONLY:
@@ -72,15 +83,25 @@ class WorkloadThermalController:
             self.fine_control_clock = None  # l'urgence prime sur le controle fin
             return wanted
 
-        # Plus de demande de frein: relache si la temp est bien retombee.
-        if self.emergency_active and temp_c <= target_temp - 3:
-            self.emergency_active = False
-            self.emergency_profile = None
-            self.gpu_controller.reset_gpu_clocks()
-            # Re-applique le mode workload normal (ex: heavy_cool gaming).
-            self.current_mode = None
-            logging.info("Fin urgence thermique (%sC <= cible %sC)", int(temp_c), int(target_temp))
-            return "released"
+        # Plus de demande de frein -> deux portes de sortie (anti-verrouillage).
+        if self.emergency_active:
+            cooled = temp_c <= target_temp - 3
+            idle_below_target = (
+                gpu_util is not None
+                and gpu_util < self.IDLE_UTIL_PCT
+                and temp_c < target_temp
+            )
+            if cooled or idle_below_target:
+                self.emergency_active = False
+                self.emergency_profile = None
+                self.gpu_controller.reset_gpu_clocks()
+                # Re-applique le mode workload normal (ex: heavy_cool gaming).
+                self.current_mode = None
+                raison = ("refroidi" if cooled
+                          else f"charge retombee (util {gpu_util:.0f}%)")
+                logging.info("Fin urgence thermique (%sC, cible %sC) - %s",
+                             int(temp_c), int(target_temp), raison)
+                return "released"
         return None
 
     def apply_target_clock(self, max_clock: int, reason: str = "") -> bool:

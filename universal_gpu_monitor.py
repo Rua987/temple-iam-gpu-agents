@@ -740,7 +740,11 @@ class UniversalGPUMonitor:
         # Pic predit -> on escalade en thermal_focus (cap critical preventif) meme si
         # la temp reelle n'a pas encore atteint le seuil.
         eff_strategy = 'thermal_focus' if preempt_brake else strategy
-        self.thermal_controller.apply_thermal_strategy(eff_strategy, temp, target_temp)
+        # gpu_util permet au controleur de relacher quand la charge est retombee
+        # (sinon le cap peut stabiliser la temp juste au-dessus du seuil de sortie
+        # et le frein s'auto-entretient).
+        self.thermal_controller.apply_thermal_strategy(
+            eff_strategy, temp, target_temp, gpu_util=data.get('gpu_usage', 0))
         if self.thermal_controller.emergency_active:
             return  # on freine: pas de controle fin tant que ca chauffe
 
