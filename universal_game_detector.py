@@ -56,6 +56,26 @@ KNOWN_WORKLOAD_CATEGORIES = {
     'webview2.exe': 'browser_webview',
 }
 
+# Marqueurs par SOUS-CHAINE, testés si l'exact-match ci-dessus échoue.
+# Necessaire car les suites IA lancent plusieurs binaires: le serveur
+# ("ollama.exe") mais aussi l'interface ("ollama app.exe") et des helpers.
+# Sans ca, "ollama app.exe" tombait en 'unknown_gpu_app' et s'affichait avec
+# une cible FPS - absurde pour de l'inference.
+WORKLOAD_NAME_MARKERS = (
+    ('ollama', 'local_ai'),
+    ('lm studio', 'local_ai'),
+    ('lmstudio', 'local_ai'),
+    ('koboldcpp', 'local_ai'),
+    ('llama-server', 'local_ai'),
+    ('llama_server', 'local_ai'),
+    ('llamacpp', 'local_ai'),
+    ('llama.cpp', 'local_ai'),
+    ('text-generation-webui', 'local_ai'),
+    ('comfyui', 'local_ai'),
+    ('stable-diffusion', 'local_ai'),
+    ('webview2', 'browser_webview'),
+)
+
 class UniversalGameDetector:
     """Détecteur universel de jeux - OMNISCIENCE DIVINE ! 👁️"""
 
@@ -178,7 +198,16 @@ class UniversalGameDetector:
         Returns:
             'gaming', 'local_ai', 'browser_webview' ou 'unknown_gpu_app'
         """
-        return KNOWN_WORKLOAD_CATEGORIES.get(proc_name.lower(), 'unknown_gpu_app')
+        name = proc_name.lower()
+        exact = KNOWN_WORKLOAD_CATEGORIES.get(name)
+        if exact:
+            return exact
+        # Repli par sous-chaine: attrape les variantes (GUI, helpers, serveurs)
+        # d'une meme suite, ex. "ollama app.exe" ou "LM Studio Helper.exe".
+        for marker, category in WORKLOAD_NAME_MARKERS:
+            if marker in name:
+                return category
+        return 'unknown_gpu_app'
 
     def _is_likely_game_process(self, proc_name: str, proc_info: Dict[str, Any]) -> bool:
         """
@@ -257,7 +286,13 @@ class UniversalGameDetector:
                     # 2. Vérifier dans les workloads appris
                     if proc_name in self.learned_games:
                         learned = self.learned_games[proc_name]
-                        category = learned.get('category') or self._classify_workload(proc_name)
+                        # Une regle explicite prime sur une categorie APPRISE:
+                        # l'auto-apprentissage a pu figer un 'unknown_gpu_app'
+                        # avant que le marqueur existe (ex. "ollama app.exe").
+                        # Auto-repare donc les entrees periemees sans editer le JSON.
+                        classified = self._classify_workload(proc_name)
+                        category = (classified if classified != 'unknown_gpu_app'
+                                    else (learned.get('category') or 'unknown_gpu_app'))
                         detected_game = DetectedGame(
                             profile=None,
                             process_name=proc_name,
